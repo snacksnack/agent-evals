@@ -1,6 +1,6 @@
 [project]
 name = "agent-evals"
-version = "0.1.0"
+version = "0.1.1"
 description = "Quality evals for LLM systems: frozen cases, scored characteristics, a validated judge, and run records that carry cost."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -31,6 +31,12 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+
+# Stated rather than inferred. From inside `tests/`, ruff sorted `agent_evals`
+# into the third-party block — correct-looking and wrong, and it only surfaced
+# once tests arrived that import the package by name.
+[tool.ruff.lint.isort]
+known-first-party = ["agent_evals"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

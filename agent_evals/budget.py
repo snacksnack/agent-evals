@@ -4,10 +4,10 @@ The `Ceiling` type lives here; **the ceilings themselves live with the
 consumer**, because a limit is a claim about a specific subject on a specific
 model and the library has no business knowing either.
 
-RC1-254 asks for cost, latency and token budgets with real numbers attached. The
-numbers here are **measured, not guessed** — each ceiling is set from an observed
-run with headroom, and the observation is recorded next to it so a future reader
-can tell a deliberate limit from a number someone liked the look of.
+`note` is not decoration. A ceiling should be **measured, not guessed** — set
+from an observed run with headroom — and `note` is where that observation is
+recorded, so a future reader can tell a deliberate limit from a number someone
+liked the look of. It is a required field for exactly that reason.
 
 ## A breach is a finding, not an exception
 

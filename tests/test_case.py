@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import pytest
-from agent_evals.case import Case
 from pydantic import ValidationError
+
+from agent_evals.case import Case
 
 
 def test_a_case_is_frozen():

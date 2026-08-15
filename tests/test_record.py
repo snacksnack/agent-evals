@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
+
 from agent_evals.record import (
     CaseResult,
     CharacteristicResult,

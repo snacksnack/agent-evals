@@ -79,6 +79,16 @@ _PROSE_DATE = re.compile(
 #: adjudicate, and guessing would cost precision for very little recall.
 _DAY_COUNT = re.compile(r"\b(\d{1,3})\s+(?:working\s+)?days?\b", re.IGNORECASE)
 
+#: The same quantity as `_DAY_COUNT`, written the way *facts* tend to write it:
+#: `(14d)`, `slipped 9d`. Only ever read from the facts side — a day count in
+#: the output still has to be spelled out to be checked, because `14d` in prose
+#: is rare enough that matching it would buy nothing.
+#:
+#: RC1-261: without this, a drift-digest line saying "slipped 14 days" was
+#: flagged as invented while the payload said `(14d)` two fields over. Anchored
+#: to the `d` suffix so it stays narrow — `2026-07-23` contributes nothing.
+_DAY_SHORTHAND = re.compile(r"\b(\d{1,3})d\b")
+
 #: Phrases that assert a health state — but only when they are asserted *about
 #: the whole plan*. See `_health_contradictions` for why that qualifier is the
 #: entire difference between a useful check and a muted one.
@@ -186,13 +196,23 @@ def _fact_dates(strings: set[str]) -> set[date]:
 
 def _fact_integers(strings: set[str]) -> set[int]:
     """Absolute values: a narrative writes "pulled in 3 days" where the fact is
-    `launch_shift_days: -3`. The sign is carried by the prose, not the number."""
+    `launch_shift_days: -3`. The sign is carried by the prose, not the number.
+
+    A fact that *is* a number contributes it. A fact that only contains one does
+    not — except where the number is written as a day count (`14d`), because
+    that is the same quantity in a shorthand, not an incidental digit.
+    """
     out = set()
     for value in strings:
         try:
             out.add(abs(int(float(value))))
-        except (TypeError, ValueError):
             continue
+        except (TypeError, ValueError):
+            pass
+        for match in _DAY_SHORTHAND.finditer(value):
+            out.add(int(match.group(1)))
+        for match in _DAY_COUNT.finditer(value):
+            out.add(int(match.group(1)))
     return out
 
 

@@ -141,3 +141,25 @@ def test_declared_must_not_say_is_first_class():
 # library has no access to and should not carry. Removing them here would lose
 # the guarantee, so `launch-planner-agent/apps/evals/tests/test_groundedness.py`
 # keeps them and this file keeps the unit-level regressions.
+
+
+def test_day_count_written_as_shorthand_in_the_facts_is_not_invented():
+    """`(14d)` in the facts supports "14 days" in the output.
+
+    RC1-261, found by the drift digest: its payload buries the slip in a prose
+    `detail` string, so the whole-string int parse never saw the 14 and a
+    perfectly faithful line was flagged as inventing a day count.
+    """
+    facts = {"detail": "RC1-1 due moved 2026-07-23 → 2026-08-06 (14d); RC1-2 starts 2026-07-24"}
+
+    assert groundedness.check("RC1-1 slipped 14 days", facts).grounded
+
+    flagged = groundedness.check("RC1-1 slipped 9 days", facts)
+    assert not flagged.grounded, "a day count that is nowhere in the facts is still invented"
+
+    # The anchor is the `d` suffix, and it has to stay that way: harvesting bare
+    # digits out of fact strings would let any component of a date through.
+    assert groundedness.check("RC1-1 slipped 2026-07-23", facts).grounded
+    assert not groundedness.check("RC1-1 slipped 23 days", facts).grounded, (
+        "the 23 in a date must not license a 23-day claim"
+    )

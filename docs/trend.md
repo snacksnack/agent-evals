@@ -5,6 +5,8 @@ and written through `SqlRunStore`. A pure renderer in `agent_evals/trend.py`
 turns them into one self-contained HTML page, rendered and published from a
 developer machine to GitHub Pages. CI holds no credential.
 
+**The page:** https://snacksnack.github.io/agent-evals/
+
 This replaces a design where consumer repos committed their records as JSONL
 and this repo fetched five public files to build the page (RC1-255). That
 design was tried, worked once, and was abandoned by RC1-263. The renderer

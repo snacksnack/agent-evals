@@ -1,78 +1,44 @@
-"""`python -m agent_evals.trend_cli` — build the trend page (RC1-255).
+"""`python -m agent_evals.trend_cli` — build the trend page (RC1-255, RC1-263).
 
-Reads run records from local directories or from the consumer repos on GitHub,
-renders one self-contained HTML page, and writes it out. No credentials: every
-consumer repo is public, so the records are fetched over plain HTTPS.
+Reads run records from the eval store (`EVAL_DATABASE_URL`) or from a local
+directory, renders one self-contained HTML page, and writes it out.
 
-Fetching is deliberately read-only and one-directional. RC1-248 and RC1-255 both
-rejected cross-repo *dispatch* — machinery that needs tokens, write access and
-coordination between workflows. Reading five public files needs none of that,
-and the difference is the reason this is a workflow step rather than a service.
+The page is rendered and published from a developer machine, never CI.
+Records only exist because a human ran a suite, so the machine that just
+wrote them is the machine that rebuilds the page — and CI holds no database
+credential (RC1-263). `scripts/publish_trend.sh` does both steps.
+
+An unreachable store is a hard failure, not a note: silently rendering fewer
+records than exist would understate a trend, the same rule `RunStore.all`
+applies to a malformed line. Only an empty store is a note, because "no runs
+yet" is a true statement the page should make.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 from agent_evals import trend
 
-#: The repos that commit run records, and where the records live in each.
-SOURCES: tuple[tuple[str, str], ...] = (
-    ("launch-planner-agent", "eval-runs/runs.jsonl"),
-    ("tpm-automation-platform", "eval-runs/runs.jsonl"),
-    ("pr_agent", "eval-runs/runs.jsonl"),
-    ("n8n-stakeholder-status-email", "eval-runs/runs.jsonl"),
-    ("n8n-concert-intelligence", "eval-runs/runs.jsonl"),
-)
 
-_RAW = "https://raw.githubusercontent.com/{owner}/{repo}/main/{path}"
+def fetch(dsn: str) -> tuple[list[dict], list[str]]:
+    """Every record in the store, oldest first, plus notes for the page."""
+    from agent_evals.sql_store import SqlRunStore
 
-
-def fetch(owner: str) -> tuple[list[dict], list[str]]:
-    """Records from every source repo, plus a note per source that had none.
-
-    A repo with no records yet is normal and not an error — it means nobody has
-    run its billed suite since the log was committed. The notes are surfaced on
-    the page so "this subject is missing" is never mistaken for "this subject
-    has no runs".
-    """
-    import json
-
-    records: list[dict] = []
-    notes: list[str] = []
-    for repo, path in SOURCES:
-        url = _RAW.format(owner=owner, repo=repo, path=path)
-        try:
-            with urllib.request.urlopen(url, timeout=30) as response:  # noqa: S310
-                body = response.read().decode()
-        except urllib.error.HTTPError as exc:
-            notes.append(f"{repo}: no records ({exc.code})")
-            continue
-        except OSError as exc:
-            notes.append(f"{repo}: unreachable ({exc})")
-            continue
-        count = 0
-        for line in body.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                records.append(json.loads(line))
-                count += 1
-            except json.JSONDecodeError:
-                notes.append(f"{repo}: skipped a malformed line")
-        if not count:
-            notes.append(f"{repo}: log is present but empty")
+    store = SqlRunStore(dsn)
+    try:
+        records = store.raw()
+    finally:
+        store.close()
+    notes = [] if records else ["the store has no records yet"]
     return records, notes
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agent-evals trend", description=__doc__)
-    parser.add_argument("--owner", default="snacksnack", help="GitHub owner of the source repos")
     parser.add_argument("--local", type=Path, help="read from a local directory instead")
     parser.add_argument("--out", type=Path, default=Path("site/index.html"))
     parser.add_argument("--limit", type=int, default=trend.DEFAULT_LIMIT)
@@ -81,7 +47,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.local:
         records, notes = trend.load_dir(args.local), []
     else:
-        records, notes = fetch(args.owner)
+        dsn = os.environ.get("EVAL_DATABASE_URL")
+        if not dsn:
+            parser.error(
+                "EVAL_DATABASE_URL is not set and --local was not given — "
+                "the store's location lives in one place outside the repos (RC1-263)"
+            )
+        records, notes = fetch(dsn)
 
     for note in notes:
         print(f"  note: {note}", file=sys.stderr)

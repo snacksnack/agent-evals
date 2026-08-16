@@ -15,6 +15,7 @@ money even at this scale, and the JSON round-trip keeps the exact string.
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -29,6 +30,55 @@ class DuplicateRunId(Exception):
     Raised rather than tolerated: `evals report <run-id>` resolves by id, so two
     records sharing one would make the report silently ambiguous.
     """
+
+
+class CredentialShapedRecord(Exception):
+    """A record containing something shaped like a real provider credential.
+
+    Raised at write time, before the record reaches any store. A run record
+    stores model output verbatim, so it inherits the sensitivity of whatever
+    the subject observed — `pr_agent`'s eval plants a credential on purpose and
+    the review agent quotes it back in a finding. That is fine while the
+    fixture is an invented value no scanner claims, and it was not fine when
+    the fixture used a realistic `sk_live_...`: GitHub push protection refused
+    the log, correctly (RC1-263).
+
+    The fix is always to drop the affected record and repair the fixture,
+    never to allowlist: a planted secret must be a value no real scanner
+    claims, because every scanner between here and production is one that has
+    to be argued with otherwise.
+    """
+
+
+#: Provider-shaped credential patterns. Precision over recall, like every
+#: checker in this library: each pattern is distinctive enough that a match is
+#: worth refusing a write over, and the set is not pretending to be a general
+#: secret scanner. Inherited from the repo-scanning test the committed-records
+#: design needed (RC1-255), plus the Anthropic key shape — the credential this
+#: harness itself is most likely to be near.
+_PROVIDER_SHAPED = re.compile(
+    r"sk-ant-[A-Za-z0-9_-]{20,}"
+    r"|sk_(live|test)_[A-Za-z0-9]{20,}"
+    r"|AKIA[0-9A-Z]{16}"
+    r"|gh[pousr]_[A-Za-z0-9]{36}"
+    r"|xox[baprs]-[A-Za-z0-9-]{10,}"
+    r"|AIza[0-9A-Za-z_-]{35}"
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----"
+)
+
+
+def refuse_credential_shaped(payload: str, *, run_id: str, destination: str) -> None:
+    """Raise `CredentialShapedRecord` if the serialized record matches.
+
+    The matched value is deliberately not echoed — an error message quoting a
+    credential would put it in exactly the logs this guard keeps it out of.
+    """
+    if _PROVIDER_SHAPED.search(payload):
+        raise CredentialShapedRecord(
+            f"run {run_id!r} contains a provider-shaped credential and was not "
+            f"written to {destination}. Fix the fixture and drop this record "
+            "rather than allowlisting it."
+        )
 
 
 class Usage(BaseModel):
@@ -189,12 +239,13 @@ def new_run_id(subject: str, when: datetime | None = None) -> str:
 class RunStore:
     """Append-only JSONL log of eval runs. One record per line, newest last.
 
-    The same event-log instinct as the plan store (ADR-0012), without the SQLite
-    triggers — a text file cannot enforce its own immutability. So the guarantee
-    is structural rather than enforced by the storage layer: this class opens
-    the file only in append mode and exposes no update or delete, and a test
-    asserts that appending leaves every earlier line byte-identical. Anything
-    wanting to rewrite history has to go around this class, visibly.
+    The local default. The same event-log instinct as the plan store (ADR-0012);
+    here the guarantee is structural — this class opens the file only in append
+    mode and exposes no update or delete, and a test asserts that appending
+    leaves every earlier line byte-identical. Where immutability is enforced by
+    the storage layer itself, use `SqlRunStore` (RC1-263): its Postgres table
+    refuses UPDATE and DELETE with a trigger, the way the plan store's SQLite
+    ones do.
     """
 
     def __init__(self, path: Path) -> None:
@@ -206,9 +257,11 @@ class RunStore:
                 f"run id {record.run_id!r} is already in {self.path} — "
                 "two records with one id would make `evals report` ambiguous"
             )
+        payload = record.model_dump_json()
+        refuse_credential_shaped(payload, run_id=record.run_id, destination=str(self.path))
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(record.model_dump_json() + "\n")
+            handle.write(payload + "\n")
 
     def all(self) -> list[RunRecord]:
         """Every record, oldest first. Blank lines are skipped; a malformed line

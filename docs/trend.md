@@ -27,16 +27,24 @@ This reads five public files over HTTPS. No token, no write access, no
 coordination — a consumer repo does not know this page exists. That asymmetry is
 the whole reason it is a workflow step rather than infrastructure.
 
-## Only billed runs are committed
+## What gets committed: deliberate runs, not cheap ones
 
-Billed suites are run by hand at decision points, so each record is a
-measurement someone chose to take. Free CI runs are a **gate**: they answer
-pass/fail on every push, and trending "the deterministic checker still returns
-36/36" would bury the signal under noise. Having CI commit on every push would
-also need write access in five workflows, for no gain.
+The first version of this decision said "billed runs only". Looking at the real
+records changed it.
 
-So `eval-runs/runs.jsonl` is committed and the free subjects' records are not.
-Each consumer repo's `.gitignore` says which is which.
+The line that matters is **whether a human chose to take the measurement**, not
+what it cost. `eval-runs/runs.jsonl` is written by someone running the CLI, and
+**CI never writes to it** — so everything in the committed log is deliberate by
+construction, and no workflow needs write access.
+
+Excluding free runs would also have thrown away signal. The `groundedness`
+subject is free, and its series is where the harness pin bump
+`code: 0.1.0 → 0.2.0` shows up against a flat score — one of the two things this
+view found on its first run. A free subject still carries a `code_version`, and
+that is exactly the attribution a pin bump needs.
+
+What is *not* committed is anything CI produces. That is enforced by CI simply
+not committing, rather than by a rule anyone has to remember.
 
 ## What the page claims, and what it does not
 

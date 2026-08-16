@@ -3,13 +3,23 @@ name: Trend
 # RC1-255. Reads the run records the consumer repos commit and publishes one
 # static page. Read-only and one-directional: every source repo is public, so
 # this needs no token and no write access anywhere.
+# PAUSED (RC1-263). Manual-only until the run-record store is settled.
+#
+# This failed on the merge of PR #4 and would keep failing on every push and
+# daily at 06:17 UTC. Two separate problems, stacked:
+#
+#   1. GitHub Pages was never enabled on the repo, so deploy-pages 404s
+#      regardless of what it is handed.
+#   2. The build step fetches eval-runs/runs.jsonl from five consumer repos,
+#      and that file exists on none of their main branches — the PRs that would
+#      have added it are being closed unmerged (RC1-263).
+#
+# Enabling Pages is deliberately NOT the fix. It would turn an honest failure
+# into a successfully published empty page, which is worse: a red badge says
+# "this is not working", a green one pointing at nothing says the opposite.
+#
+# Restore `push` and `schedule` when RC1-263 lands a store with records in it.
 on:
-  push:
-    branches: [main]
-  schedule:
-    # Daily, so a run recorded in a consumer repo shows up without needing a
-    # push here. Cheap: it fetches five files and renders.
-    - cron: "17 6 * * *"
   workflow_dispatch:
 
 permissions:

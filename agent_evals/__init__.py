@@ -33,13 +33,14 @@ people trust and one they disable.
 
 from __future__ import annotations
 
-__version__ = "0.1.2"
+__version__ = "0.2.0"
 
 from agent_evals.budget import Ceiling, breaches_for
 from agent_evals.case import Case
 from agent_evals.record import (
     CaseResult,
     CharacteristicResult,
+    CredentialShapedRecord,
     DuplicateRunId,
     RunRecord,
     RunStore,
@@ -47,15 +48,18 @@ from agent_evals.record import (
     Usage,
     new_run_id,
 )
+from agent_evals.sql_store import SqlRunStore
 
 __all__ = [
     "Case",
     "CaseResult",
     "Ceiling",
     "CharacteristicResult",
+    "CredentialShapedRecord",
     "DuplicateRunId",
     "RunRecord",
     "RunStore",
+    "SqlRunStore",
     "SubjectVersion",
     "Usage",
     "__version__",

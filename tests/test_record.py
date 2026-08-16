@@ -16,6 +16,7 @@ import pytest
 from agent_evals.record import (
     CaseResult,
     CharacteristicResult,
+    CredentialShapedRecord,
     DuplicateRunId,
     RunRecord,
     RunStore,
@@ -155,6 +156,21 @@ def test_cost_stays_exact_across_the_json_round_trip(tmp_path):
     record.results[0].usage.cost_usd = Decimal("0.0000031")
     store.append(record)
     assert store.get(record.run_id).results[0].usage.cost_usd == Decimal("0.0000031")
+
+
+def test_a_credential_shaped_record_is_refused_at_write_time(tmp_path):
+    """A record inherits the sensitivity of whatever the subject observed, so
+    the guard sits where the record is written (RC1-263) — not in a repo scan
+    after the fact. The planted value is assembled at runtime so this file
+    never contains a scannable credential."""
+    store = RunStore(tmp_path / "runs.jsonl")
+    record = _record()
+    record.results[0].characteristics[0] = CharacteristicResult(
+        name="leak", passed=False, detail="found " + "sk_live_" + "a" * 24
+    )
+    with pytest.raises(CredentialShapedRecord, match="drop this record"):
+        store.append(record)
+    assert not store.path.exists()
 
 
 def test_subject_version_states_the_absence_of_a_model(tmp_path):

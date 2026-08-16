@@ -7,6 +7,19 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # A real Postgres for SqlRunStore's tests — triggers included, no secret,
+    # no vendor. The suite stays credential-free (ADR-0031, RC1-263).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+        ports: ["5432:5432"]
+    env:
+      EVAL_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
@@ -15,7 +28,7 @@ jobs:
           python-version: "3.12"
           enable-cache: true
       - name: Sync
-        run: uv sync --extra dev
+        run: uv sync --extra dev --extra sql
       - name: Lint
         run: uv run ruff check .
       - name: Tests

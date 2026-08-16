@@ -7,6 +7,11 @@ what each run cost.
 Built because five LLM systems were in production across three repos and nothing
 answered the question *"how do you know the output is any good?"*
 
+The measured answer is public: every suite run lands in a shared store and
+renders to the **[quality trend page](https://snacksnack.github.io/agent-evals/)**
+— score per subject over time, each point attributed to a model, prompt and code
+version. `docs/trend.md` explains what the page claims and how it publishes.
+
 ## The idea in one paragraph
 
 A **subject** is a system under test. It runs against frozen **cases**, and each

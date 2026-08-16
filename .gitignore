@@ -5,3 +5,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .env
+
+# Rendered trend page. scripts/publish_trend.sh writes it here and pushes it
+# to gh-pages; the artifact never belongs in main's history (RC1-263).
+site/

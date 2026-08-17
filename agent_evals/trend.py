@@ -269,6 +269,26 @@ svg.ov { margin:.8rem 0 .2rem; }
 .leader { stroke:var(--rule-dark); stroke-width:1; stroke-dasharray:2 3; }
 .slabel .name { font:11px var(--mono); }
 .slabel .val { font:10px var(--mono); fill:var(--muted); }
+.ovhead { display:flex; justify-content:space-between; align-items:center;
+          gap:1rem; flex-wrap:wrap; }
+.controls { display:flex; gap:.5rem; }
+.seg { display:inline-flex; border:1px solid var(--rule); border-radius:6px;
+       overflow:hidden; }
+.seg button { font:11px var(--mono); background:var(--panel); color:var(--muted);
+              border:0; padding:.3rem .6rem; cursor:pointer; }
+.seg button[aria-pressed='true'] { background:var(--ink); color:var(--panel); }
+.readout { font:12px var(--mono); color:var(--muted); background:var(--paper);
+           border:1px solid var(--rule); border-radius:6px; padding:.5rem .8rem;
+           margin:.8rem 0 0; }
+.chips { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.6rem; }
+.chipbtn { display:inline-flex; align-items:center; gap:.35rem; font:11px var(--mono);
+           color:var(--muted); background:var(--panel); border:1px solid var(--rule);
+           border-radius:999px; padding:.25rem .6rem; }
+.chipbtn[aria-pressed='true'] { border-color:var(--ink); color:var(--ink); }
+body.js .chipbtn, body.js .ov .series, body.js .ov .slabel { cursor:pointer; }
+.ov.movers-only .series:not(.mover) { display:none; }
+.ov.iso .series:not(.sel), .ov.iso .slabel:not(.sel),
+.ov.iso .leader:not(.sel) { opacity:.12; }
 .legend { display:flex; gap:1.4rem; flex-wrap:wrap; align-items:center;
           margin-top:2rem; padding-top:1rem; border-top:1px solid var(--rule);
           font:11px var(--mono); color:var(--muted); }
@@ -279,6 +299,84 @@ svg.ov { margin:.8rem 0 .2rem; }
 .dot.err { background:var(--panel); border:2px solid var(--bad); }
 .dot.vc { background:var(--vc); }
 code { font:12px/1.4 var(--mono); }
+"""
+
+#: The page's only JavaScript, inlined — one file, no external request, no
+#: credential (the constraint RC1-271 restated; docs/trend.md has the
+#: reasoning). Everything here asks questions of the chart the server already
+#: drew: isolate a subject, drop the flat series, re-index x by run number,
+#: read a point without waiting for a native tooltip. With scripting disabled
+#: none of it runs and nothing on the page disappears — the controls and
+#: readout ship `hidden` and are only revealed from here.
+_JS = """
+(function () {
+  'use strict';
+  var ov = document.querySelector('svg.ov');
+  if (!ov) return;
+  document.body.classList.add('js');
+  document.querySelectorAll('.jsonly').forEach(function (el) { el.hidden = false; });
+  var readout = document.getElementById('readout');
+  var rest = readout ? readout.textContent : '';
+  var iso = null, movers = false, byrun = false;
+  function pressed(btn, on) { if (btn) btn.setAttribute('aria-pressed', String(on)); }
+  function status() {
+    return iso ? 'isolated: ' + iso + ' — click again to release' : rest;
+  }
+  function apply() {
+    ov.classList.toggle('movers-only', movers);
+    ov.classList.toggle('iso', iso !== null);
+    ov.querySelectorAll('.series, .slabel, .leader').forEach(function (el) {
+      el.classList.toggle('sel', el.getAttribute('data-subject') === iso);
+    });
+    document.querySelectorAll('.chipbtn').forEach(function (b) {
+      pressed(b, b.getAttribute('data-subject') === iso);
+    });
+    ov.querySelectorAll('polyline[data-rpts]').forEach(function (p) {
+      p.setAttribute('points', p.getAttribute(byrun ? 'data-rpts' : 'data-tpts'));
+    });
+    ov.querySelectorAll('circle[data-rx]').forEach(function (c) {
+      c.setAttribute('cx', c.getAttribute(byrun ? 'data-rx' : 'data-tx'));
+    });
+    ov.querySelectorAll('line[data-rx1]').forEach(function (l) {
+      l.setAttribute('x1', l.getAttribute(byrun ? 'data-rx1' : 'data-tx1'));
+    });
+    var tt = ov.querySelector('.ticks-time'), tr = ov.querySelector('.ticks-run');
+    if (tt) tt.style.display = byrun ? 'none' : '';
+    if (tr) tr.style.display = byrun ? '' : 'none';
+    if (readout) readout.textContent = status();
+  }
+  function toggleIso(name) { iso = iso === name ? null : name; apply(); }
+  ov.addEventListener('click', function (e) {
+    var g = e.target.closest('[data-subject]');
+    if (g) toggleIso(g.getAttribute('data-subject'));
+  });
+  document.querySelectorAll('.chipbtn').forEach(function (b) {
+    b.addEventListener('click', function () { toggleIso(b.getAttribute('data-subject')); });
+  });
+  ov.addEventListener('mousemove', function (e) {
+    if (!readout) return;
+    var g = e.target.closest('g');
+    var first = g && g.firstElementChild;
+    if (first && first.nodeName.toLowerCase() === 'title') {
+      readout.textContent = first.textContent;
+      return;
+    }
+    var tipped = e.target.closest('[data-tip]');
+    readout.textContent = tipped ? tipped.getAttribute('data-tip') : status();
+  });
+  ov.addEventListener('mouseleave', function () {
+    if (readout) readout.textContent = status();
+  });
+  function wire(id, fn) {
+    var b = document.getElementById(id);
+    if (b) b.addEventListener('click', fn);
+    return b;
+  }
+  var bAll = wire('b-all', function () { movers = false; pressed(bAll, true); pressed(bMov, false); apply(); });
+  var bMov = wire('b-movers', function () { movers = true; pressed(bAll, false); pressed(bMov, true); apply(); });
+  var bTime = wire('b-time', function () { byrun = false; pressed(bTime, true); pressed(bRun, false); apply(); });
+  var bRun = wire('b-run', function () { byrun = true; pressed(bTime, false); pressed(bRun, true); apply(); });
+})();
 """
 
 #: Categorical series palette — six hues at pinned lightness/chroma, assigned
@@ -304,11 +402,7 @@ def render(records: Iterable[dict], *, limit: int = DEFAULT_LIMIT, generated: st
     if not grouped:
         body.append('<p class="note">No run records found.</p>')
     else:
-        body.append(
-            "<section class='card'><h2>All subjects, one axis</h2>"
-            + _overview(windows, colours)
-            + "</section>"
-        )
+        body.append(_overview_card(windows, colours))
         sections = [
             _section(subject, grouped[subject], windows[subject], colours) for subject in grouped
         ]
@@ -320,7 +414,45 @@ def render(records: Iterable[dict], *, limit: int = DEFAULT_LIMIT, generated: st
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         f"<title>Agent eval trend</title><style>{_CSS}</style></head><body>"
         + "\n".join(body)
-        + "</body></html>"
+        + f"<script>{_JS}</script></body></html>"
+    )
+
+
+def _overview_card(windows: dict[str, list[Point]], colours: dict[str, str]) -> str:
+    """The overview chart with its interactions' chrome.
+
+    The controls and readout ship `hidden` and the inline script reveals
+    them: with JavaScript disabled the chart, every label and every value
+    still render — the interactions degrade, nothing disappears, and no dead
+    control is shown (RC1-271). The chips stay visible either way, because
+    they carry the steady subjects' rates, which the chart does not label.
+    """
+    controls = (
+        "<div class='controls jsonly' hidden>"
+        "<div class='seg'>"
+        f"<button id='b-all' aria-pressed='true'>all {len(windows)}</button>"
+        "<button id='b-movers' aria-pressed='false'>movers only</button></div>"
+        "<div class='seg'>"
+        "<button id='b-time' aria-pressed='true'>by time</button>"
+        "<button id='b-run' aria-pressed='false'>by run #</button></div></div>"
+    )
+    chips = []
+    for subject, window in windows.items():
+        last = window[-1]
+        colour = colours.get(subject, "var(--steady)")
+        chips.append(
+            f"<button class='chipbtn' data-subject='{html.escape(subject)}' "
+            "aria-pressed='false'>"
+            f"<span class='dot' style='background:{colour}'></span>"
+            f"{html.escape(subject)} <span>{_axis_pct(last.rate)}</span></button>"
+        )
+    return (
+        "<section class='card'><div class='ovhead'>"
+        "<h2>All subjects, one axis</h2>" + controls + "</div>"
+        "<div class='readout jsonly' id='readout' hidden>"
+        "hover a line — click to isolate a subject</div>"
+        + _overview(windows, colours)
+        + f"<div class='chips'>{''.join(chips)}</div></section>"
     )
 
 
@@ -398,6 +530,12 @@ def _overview(windows: dict[str, list[Point]], colours: dict[str, str]) -> str:
     draw grey and unlabelled underneath. Without that split, fourteen lines
     stacked on 100% are unreadable — the grey lines are the proof that nothing
     is hidden, the coloured ones are the reading.
+
+    Every x-position is emitted twice: laid out by real time (the default and
+    the no-JS fallback) and by run number (`data-` attributes the inline
+    script swaps in). Neither axis is correct alone — on a time axis a
+    debugging burst compresses into a sliver; on a run axis three sweeps and
+    thirteen runs look like the same amount of history (RC1-271).
     """
     left, top, right, bottom = _OV_PLOT
     everything = [p for w in windows.values() for p in w]
@@ -406,9 +544,15 @@ def _overview(windows: dict[str, list[Point]], colours: dict[str, str]) -> str:
     t0 = min(p.started_at for p in everything)
     t1 = max(p.started_at for p in everything)
     span = (t1 - t0).total_seconds() or 1.0
+    maxn = max(len(w) for w in windows.values())
 
     def x(when: datetime) -> float:
         return round(left + (when - t0).total_seconds() / span * (right - left), 1)
+
+    def rx(i: int) -> float:
+        if maxn < 2:
+            return round((left + right) / 2, 1)
+        return round(left + i * (right - left) / (maxn - 1), 1)
 
     def y(rate: float) -> float:
         return round(bottom - rate * (bottom - top), 1)
@@ -423,15 +567,26 @@ def _overview(windows: dict[str, list[Point]], colours: dict[str, str]) -> str:
             f"<text class='axis' x='{left - 6}' y='{y(frac) + 3}' "
             f"text-anchor='end'>{_axis_pct(frac)}</text>"
         )
+
+    time_ticks = []
     for i in range(5):
         when = t0 + (t1 - t0) * i / 4
         anchor = "start" if i == 0 else "end" if i == 4 else "middle"
         tick_x = x(when)
-        parts.append(
+        time_ticks.append(
             f"<text class='axis' x='{tick_x}' y='{bottom + 20}' text-anchor='{anchor}'>"
             f"{when.strftime('%H:%M')}"
             f"<tspan x='{tick_x}' dy='12'>{when.strftime('%m-%d')}</tspan></text>"
         )
+    parts.append(f"<g class='ticks-time'>{''.join(time_ticks)}</g>")
+    run_ticks = []
+    for i in sorted({round(k * (maxn - 1) / 4) for k in range(5)}):
+        anchor = "start" if i == 0 else "end" if i == maxn - 1 else "middle"
+        run_ticks.append(
+            f"<text class='axis' x='{rx(i)}' y='{bottom + 20}' "
+            f"text-anchor='{anchor}'>run {i + 1}</text>"
+        )
+    parts.append(f"<g class='ticks-run' style='display:none'>{''.join(run_ticks)}</g>")
 
     # Steady subjects first so movers draw over them.
     order = sorted(windows, key=lambda s: (s in colours, s))
@@ -439,13 +594,22 @@ def _overview(windows: dict[str, list[Point]], colours: dict[str, str]) -> str:
     for subject in order:
         window = windows[subject]
         colour = colours.get(subject)
-        pts = " ".join(f"{x(p.started_at)},{y(p.rate)}" for p in window)
         cls = "tline" if colour else "tline steady"
         stroke = f" stroke='{colour}'" if colour else ""
         mover = " mover" if colour else ""
         series = [f"<g class='series{mover}' data-subject='{html.escape(subject)}'>"]
         if len(window) > 1:
-            series.append(f"<polyline class='{cls}'{stroke} points='{pts}'/>")
+            tpts = " ".join(f"{x(p.started_at)},{y(p.rate)}" for p in window)
+            rpts = " ".join(f"{rx(i)},{y(p.rate)}" for i, p in enumerate(window))
+            last = window[-1]
+            tip = html.escape(
+                f"{subject} — latest {_axis_pct(last.rate)} ({last.passed}/{last.total}) "
+                f"over {len(window)} runs"
+            )
+            series.append(
+                f"<polyline class='{cls}'{stroke} points='{tpts}' "
+                f"data-tpts='{tpts}' data-rpts='{rpts}' data-tip='{tip}'/>"
+            )
         changes = version_changes(window)
         for i, p in enumerate(window):
             # Steady series stay quiet: endpoint only — except a version change
@@ -453,12 +617,14 @@ def _overview(windows: dict[str, list[Point]], colours: dict[str, str]) -> str:
             # move (a pin bump with no score change is the reassuring finding).
             if not colour and i < len(window) - 1 and p.run_id not in changes and not p.errored:
                 continue
-            series.append(_ov_dot(p, x(p.started_at), y(p.rate), colour, changes))
+            series.append(_ov_dot(p, x(p.started_at), rx(i), y(p.rate), colour, changes))
         series.append("</g>")
         parts.append("".join(series))
         if colour:
             last = window[-1]
-            labels.append((subject, colour, x(last.started_at), y(last.rate), last))
+            labels.append(
+                (subject, colour, x(last.started_at), rx(len(window) - 1), y(last.rate), last)
+            )
 
     parts.append(_edge_labels(labels))
     return (
@@ -471,7 +637,12 @@ def _overview(windows: dict[str, list[Point]], colours: dict[str, str]) -> str:
 
 
 def _ov_dot(
-    p: Point, cx: float, cy: float, colour: str | None, changes: dict[str, list[str]]
+    p: Point,
+    tx: float,
+    rx: float,
+    cy: float,
+    colour: str | None,
+    changes: dict[str, list[str]],
 ) -> str:
     moved = changes.get(p.run_id, [])
     tip = (
@@ -480,35 +651,39 @@ def _ov_dot(
     )
     if p.errored:
         tip += f" — {p.errored} errored"
+    if p.advisory_failed:
+        tip += f" — {p.advisory_failed} advisory"
+    tip += " — " + "; ".join(moved) if moved else " — no version change"
+    coords = f"cx='{tx}' data-tx='{tx}' data-rx='{rx}' cy='{cy}'"
     if moved:
-        tip += " — " + "; ".join(moved)
-    if moved:
-        dot = f"<circle class='pt vc' cx='{cx}' cy='{cy}' r='4'/>"
+        dot = f"<circle class='pt vc' {coords} r='4'/>"
     elif p.errored:
-        dot = f"<circle class='pt err' cx='{cx}' cy='{cy}' r='3.6'/>"
+        dot = f"<circle class='pt err' {coords} r='3.6'/>"
     else:
         fill = colour or "var(--steady)"
-        dot = f"<circle class='pt' fill='{fill}' cx='{cx}' cy='{cy}' r='2'/>"
+        dot = f"<circle class='pt' fill='{fill}' {coords} r='2'/>"
     return (
         f"<g><title>{html.escape(tip)}</title>"
-        f"<circle class='hit' cx='{cx}' cy='{cy}' r='7'/>{dot}</g>"
+        f"<circle class='hit' {coords} r='7'/>{dot}</g>"
     )
 
 
-def _edge_labels(labels: list[tuple[str, str, float, float, Point]]) -> str:
+def _edge_labels(labels: list[tuple[str, str, float, float, float, Point]]) -> str:
     """Right-gutter labels, staggered to a minimum vertical gap and joined to
     their endpoints by dashed leaders."""
     if not labels:
         return ""
     _, top, _, bottom = _OV_PLOT
     lo, hi = top + 6, _OV_H - _LABEL_GAP
-    desired = [min(max(item[3], lo), hi) for item in labels]
+    desired = [min(max(item[4], lo), hi) for item in labels]
     ys = _stagger(desired, _LABEL_GAP, lo, hi)
     out = []
-    for (subject, colour, px, py, last), ly in zip(labels, ys, strict=True):
+    for (subject, colour, px, rpx, py, last), ly in zip(labels, ys, strict=True):
         name = html.escape(subject)
         out.append(
-            f"<line class='leader' x1='{px + 4}' y1='{py}' x2='{_OV_PLOT[2] + 8}' y2='{ly}'/>"
+            f"<line class='leader' data-subject='{name}' x1='{px + 4}' "
+            f"data-tx1='{px + 4}' data-rx1='{rpx + 4}' y1='{py}' "
+            f"x2='{_OV_PLOT[2] + 8}' y2='{ly}'/>"
             f"<g class='slabel' data-subject='{name}'>"
             f"<text class='name' fill='{colour}' x='{_OV_PLOT[2] + 12}' y='{ly + 3}'>{name}</text>"
             f"<text class='val' x='{_OV_PLOT[2] + 12}' y='{ly + 16}'>"

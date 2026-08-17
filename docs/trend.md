@@ -95,6 +95,29 @@ of writing: a record containing a provider-shaped credential raises
 record and fix the fixture rather than allowlisting it — a planted secret
 must be a value no real scanner claims.
 
+## The constraint, restated (RC1-271)
+
+RC1-268 wrote "no `<script>`" into the acceptance criteria, reasoning from
+this document that the page must stay one self-contained file with no
+external assets and no credentials. Prototyping the RC1-270 redesign showed
+that criterion was stricter than the reasoning that produced it: **inline**
+JavaScript satisfies every property the rule was protecting while the
+letter of the rule forbids it. So the constraint is now stated as the
+property itself:
+
+- the page is a **single self-contained HTML file**;
+- it makes **no external request** — no script `src`, no webfont, no
+  remote image, no fetch;
+- it holds **no credential**.
+
+The tests assert exactly that, rather than the absence of a `<script>`
+tag. What the inline script buys is four ways of asking a question of the
+chart the server already drew — isolate a subject, drop the flat series,
+re-index the x-axis by run number, and a hover readout — not new data. With
+JavaScript disabled the page still renders every chart, table and label;
+the interactions degrade, nothing disappears, and the controls that would
+be dead are never shown.
+
 ## What the page claims, and what it does not
 
 One question: **a score moved — what moved with it?** Every point carries its

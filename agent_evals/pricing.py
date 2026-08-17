@@ -16,7 +16,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 #: When these prices were last verified against the published price list.
-AS_OF = "2026-08-13"
+AS_OF = "2026-08-16"
 
 _MILLION = Decimal("1000000")
 
@@ -46,6 +46,11 @@ class ModelPrice:
 #: RC1-254's budgets are supposed to inform.
 PRICES: dict[str, ModelPrice] = {
     "claude-opus-5": ModelPrice("5.00", "25.00"),
+    # tpm-automation-platform's drift digest calls this (RC1-269). Verified as
+    # the model the suite actually uses, not merely references — the same
+    # survey found pr_agent's claude-opus-4-6 to be dead config, so that one
+    # is deliberately absent and cost_usd raising on it is the design working.
+    "claude-opus-4-8": ModelPrice("5.00", "25.00"),
     "claude-sonnet-5": ModelPrice(
         "3.00", "15.00", note="introductory 2.00/10.00 through 2026-08-31; standard used here"
     ),

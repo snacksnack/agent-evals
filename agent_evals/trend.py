@@ -416,7 +416,9 @@ def _overview(windows: dict[str, list[Point]], colours: dict[str, str]) -> str:
     parts = []
     for frac in (0.0, 0.25, 0.5, 0.75, 1.0):
         cls = "grid dark" if frac == 1.0 else "grid"
-        parts.append(f"<line class='{cls}' x1='{left}' y1='{y(frac)}' x2='{right}' y2='{y(frac)}'/>")
+        parts.append(
+            f"<line class='{cls}' x1='{left}' y1='{y(frac)}' x2='{right}' y2='{y(frac)}'/>"
+        )
         parts.append(
             f"<text class='axis' x='{left - 6}' y='{y(frac) + 3}' "
             f"text-anchor='end'>{_axis_pct(frac)}</text>"
@@ -468,7 +470,9 @@ def _overview(windows: dict[str, list[Point]], colours: dict[str, str]) -> str:
     )
 
 
-def _ov_dot(p: Point, cx: float, cy: float, colour: str | None, changes: dict[str, list[str]]) -> str:
+def _ov_dot(
+    p: Point, cx: float, cy: float, colour: str | None, changes: dict[str, list[str]]
+) -> str:
     moved = changes.get(p.run_id, [])
     tip = (
         f"{p.subject} — {p.started_at.strftime('%Y-%m-%d %H:%M')} — "
@@ -679,8 +683,10 @@ def _sparkline(
         f"<line class='grid mid' x1='{left}' y1='{y(mid)}' x2='{right}' y2='{y(mid)}'/>"
         f"<line class='grid' x1='{left}' y1='{bottom}' x2='{right}' y2='{bottom}'/>"
         f"<text class='axis' x='{left - 6}' y='{top + 3}' text-anchor='end'>{_axis_pct(hi)}</text>"
-        f"<text class='axis' x='{left - 6}' y='{y(mid) + 3}' text-anchor='end'>{_axis_pct(mid)}</text>"
-        f"<text class='axis' x='{left - 6}' y='{bottom + 3}' text-anchor='end'>{_axis_pct(lo)}</text>"
+        f"<text class='axis' x='{left - 6}' y='{y(mid) + 3}' "
+        f"text-anchor='end'>{_axis_pct(mid)}</text>"
+        f"<text class='axis' x='{left - 6}' y='{bottom + 3}' "
+        f"text-anchor='end'>{_axis_pct(lo)}</text>"
         f"<text class='axis' x='{left}' y='{bottom + 16}'>"
         f"{first.started_at.strftime('%Y-%m-%d %H:%M')}</text>"
         f"<text class='axis' x='{right}' y='{bottom + 16}' text-anchor='end'>"

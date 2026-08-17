@@ -137,9 +137,9 @@ thing they test — and each documents how to run its own suite:
 | --- | --- |
 | [`launch-planner-agent`](https://github.com/snacksnack/launch-planner-agent) | `groundedness`, `status-narrative`, `status-narrative-fallback`, `health`, `tool-selection`, `work-breakdown`, `dependency`, `raid` |
 | [`tpm-automation-platform`](https://github.com/snacksnack/tpm-automation-platform) | `drift-digest`, `drift-digest-allclear` |
-| [`pr-request-agent`](https://github.com/snacksnack/pr-request-agent) | `pr-review` (planted-defect recall) |
+| [`pr-request-agent`](https://github.com/snacksnack/pr_agent) | `pr-review` (planted-defect recall) |
 | [`n8n-stakeholder-status-email`](https://github.com/snacksnack/n8n-stakeholder-status-email) | `stakeholder-status-email` |
-| [`n8n-concert-intelligence`](https://github.com/snacksnack/n8n-concert-intelligence) | `concert-preview` |
+| [`n8n-concert-intelligence`](https://github.com/snacksnack/n8n-concert-intelligence-agent) | `concert-preview` |
 
 **What it costs.** Each repo splits its suite into a free half (deterministic
 checks, runnable in CI with no credential — the property ADR-0031 protects) and

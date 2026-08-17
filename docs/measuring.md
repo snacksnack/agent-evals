@@ -41,9 +41,9 @@ Run each from its repo root.
 | --- | --- | --- | --- |
 | [`launch-planner-agent`](https://github.com/snacksnack/launch-planner-agent) | `uv run evals run <subject>` | `groundedness`, `status-narrative-fallback`, `health` | `LPA_ANTHROPIC_API_KEY`, from `.env` |
 | [`tpm-automation-platform`](https://github.com/snacksnack/tpm-automation-platform) | `python -m evals run drift-digest` | `drift-digest-allclear` (gates CI) | `ANTHROPIC_API_KEY`, from `.env` |
-| [`pr-request-agent`](https://github.com/snacksnack/pr-request-agent) | `python -m evals` | `--list` (corpus only) | `ANTHROPIC_API_KEY`, from `.env` |
+| [`pr-request-agent`](https://github.com/snacksnack/pr_agent) | `python -m evals` | `--list` (corpus only) | `ANTHROPIC_API_KEY`, from `.env` |
 | [`n8n-stakeholder-status-email`](https://github.com/snacksnack/n8n-stakeholder-status-email) | `python -m evals` | `pytest` (layer 1) | `ANTHROPIC_API_KEY`, exported — no `.env` is read |
-| [`n8n-concert-intelligence`](https://github.com/snacksnack/n8n-concert-intelligence) | `python -m evals` | `pytest` (layer 1) | `ANTHROPIC_API_KEY`, exported — no `.env` is read |
+| [`n8n-concert-intelligence`](https://github.com/snacksnack/n8n-concert-intelligence-agent) | `python -m evals` | `pytest` (layer 1) | `ANTHROPIC_API_KEY`, exported — no `.env` is read |
 
 `launch-planner-agent`'s billed subjects are `tool-selection`,
 `status-narrative`, `work-breakdown`, `dependency` and `raid`; the other four

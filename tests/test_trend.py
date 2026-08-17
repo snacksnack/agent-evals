@@ -132,12 +132,38 @@ def test_runs_are_grouped_by_subject_and_ordered_oldest_first():
 
 
 def test_the_page_is_self_contained_and_escapes_what_it_renders():
+    """The constraint as restated by RC1-271: one file, no external request,
+    no credential — not "no <script>". The page's own inline script satisfies
+    all three; a script src, webfont or remote image would fail here."""
     record = _record(0)
     record["subject_version"]["subject"] = "<script>alert(1)</script>"
     page = trend.render([record])
     assert "<script>alert(1)</script>" not in page, "subject names are data, not markup"
     assert "&lt;script&gt;" in page
-    assert "http://" not in page and "https://" not in page, "no external assets"
+    assert "http" not in page, "no external requests of any kind"
+    assert "src=" not in page, "nothing loads from anywhere"
+
+
+def test_the_interactions_degrade_without_disappearing():
+    """With scripting disabled the static document must already contain every
+    chart, label and value — the inline script only reveals its own controls
+    and swaps coordinates that are all pre-rendered (RC1-271)."""
+    page = trend.render([_record(i) for i in range(3)])
+    static = page[: page.index("<script>")]
+    assert "class='ov'" in static and "class='spark'" in static, "charts are server-drawn"
+    assert "data-rpts=" in static, "the run-number layout is pre-rendered, not computed"
+    assert "class='ticks-run'" in static
+    assert "hover a line — click to isolate a subject" in static, "readout resting state"
+    assert "hidden>" in static, "js-only controls ship hidden rather than dead"
+
+
+def test_the_controls_are_real_buttons():
+    """Keyboard reachability comes from using actual <button> elements — the
+    toggles and every legend chip — not click handlers on divs."""
+    page = trend.render([_record(i) for i in range(3)])
+    assert ">movers only</button>" in page
+    assert ">by run #</button>" in page
+    assert "class='chipbtn'" in page and "aria-pressed" in page
 
 
 def _svg(page):

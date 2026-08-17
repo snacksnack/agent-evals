@@ -32,12 +32,22 @@ repos commit only the billed runs.
 display limit, the page says how many were dropped and which end. A trend view
 that quietly shows the last N looks identical to one showing everything, and
 the difference matters exactly when someone is chasing a regression.
+
+## The charts do not exaggerate (RC1-270)
+
+Every per-subject y-axis pins its top at 100% — a flat perfect series sits on
+the ceiling, where "perfect" belongs, instead of floating mid-chart looking
+like volatility. The bottom hugs the data in 0.05 steps and both bounds are
+printed. The all-subjects overview is fixed 0–100%. Runs with errored cases
+are drawn differently from runs with a low pass rate, because an eval that
+crashed and an eval that failed are different findings.
 """
 
 from __future__ import annotations
 
 import html
 import json
+import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -182,57 +192,129 @@ def _short(value: str | None) -> str:
 
 # --- rendering ------------------------------------------------------------
 
+#: One deliberate look. Every colour is pinned in the ticket (RC1-270) with a
+#: floor: no *text* resolves lighter than oklch(0.52 0.01 60) against its
+#: background — strokes and gridlines may go lighter, glyphs may not.
 _CSS = """
-:root { --bg:#fff; --fg:#1a1a1a; --muted:#666; --line:#e4e4e7;
-        --ok:#15803d; --bad:#b91c1c; --warn:#a16207; --mark:#f5f3ff; --vc:#7c3aed; }
-@media (prefers-color-scheme: dark) {
-  :root { --bg:#111; --fg:#ededed; --muted:#9a9a9a; --line:#2a2a2a;
-          --ok:#4ade80; --bad:#f87171; --warn:#fbbf24; --mark:#1e1b31; --vc:#8b5cf6; }
-}
-body { background:var(--bg); color:var(--fg); margin:0 auto; padding:2rem 1.25rem;
-       max-width:60rem; font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-h1 { font-size:1.5rem; margin:0 0 .25rem; }
-h2 { font-size:1.05rem; margin:2.5rem 0 .5rem; padding-bottom:.3rem;
-     border-bottom:1px solid var(--line); }
-.sub { color:var(--muted); margin:0 0 2rem; }
+:root { color-scheme: light;
+  --paper:oklch(0.985 0.004 85); --panel:oklch(1 0 0);
+  --ink:oklch(0.28 0.01 60); --muted:oklch(0.52 0.01 60);
+  --rule:oklch(0.9 0.006 75); --rule-dark:oklch(0.75 0.01 75);
+  --ok:oklch(0.46 0.12 150); --bad:oklch(0.53 0.17 25);
+  --warn:oklch(0.5 0.12 70); --vc:oklch(0.55 0.16 295);
+  --steady:oklch(0.8 0.008 75);
+  --ok-tint:oklch(0.95 0.03 150); --bad-tint:oklch(0.95 0.03 25);
+  --vc-tint:oklch(0.96 0.02 295);
+  --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+body { background:var(--paper); color:var(--ink); margin:0 auto;
+       padding:1.5rem 1rem 3rem; max-width:64rem; font:14px/1.55 var(--sans); }
+.card { background:var(--panel); border:1px solid var(--rule); border-radius:8px;
+        padding:1.25rem 1.5rem; margin:0 0 1.25rem; }
+h1 { font-size:1.35rem; margin:0 0 .3rem; }
+h2 { font-size:1rem; margin:0; }
+.masthead { display:flex; justify-content:space-between; gap:2rem; flex-wrap:wrap; }
+.tagline { color:var(--muted); margin:.1rem 0 1rem; max-width:26rem; }
+.stats { display:flex; gap:1.6rem; margin:0; }
+.stats div { margin:0; }
+.stats dt { font:11px var(--mono); color:var(--muted); }
+.stats dd { font:13px var(--mono); margin:0; }
+.overall { text-align:right; min-width:14rem; }
+.overall .k { font:11px var(--mono); letter-spacing:.08em; text-transform:uppercase;
+              color:var(--muted); }
+.overall .big { font:700 2rem/1.2 var(--mono); }
+.overall .cases { font:12px var(--mono); color:var(--muted); }
+.meter { height:6px; border-radius:3px; background:var(--rule); margin:.4rem 0;
+         overflow:hidden; }
+.meter > div { height:100%; background:var(--ok); }
+.shead { display:flex; align-items:baseline; gap:.6rem; flex-wrap:wrap;
+         margin:2rem 0 .4rem; padding-top:1.5rem; border-top:1px solid var(--rule); }
+section.subject:first-of-type .shead { margin-top:0; padding-top:0; border-top:0; }
+.shead h2 { font-family:var(--mono); }
+.shead .grow { flex:1; }
+.pill { font:11px var(--mono); color:var(--muted); border:1px solid var(--rule);
+        border-radius:4px; padding:.05rem .4rem; }
+.runsn { font:12px var(--mono); color:var(--muted); }
+.now { font:700 15px var(--mono); }
+.chip { font:11px var(--mono); border-radius:4px; padding:.1rem .35rem; }
+.chip.up { color:var(--ok); background:var(--ok-tint); }
+.chip.down { color:var(--bad); background:var(--bad-tint); }
+.chip.flat { color:var(--muted); border:1px solid var(--rule); }
 .wrap { overflow-x:auto; }
-table { border-collapse:collapse; width:100%; font-size:13px; }
-th { text-align:left; font-weight:600; color:var(--muted); padding:.4rem .6rem;
-     border-bottom:1px solid var(--line); white-space:nowrap; }
-td { padding:.4rem .6rem; border-bottom:1px solid var(--line); white-space:nowrap; }
-tr.changed td { background:var(--mark); }
+table { border-collapse:collapse; width:100%; font:12.5px var(--mono); }
+th { text-align:left; font-weight:500; color:var(--muted); padding:.35rem .6rem;
+     border-bottom:1px solid var(--rule); white-space:nowrap; }
+td { padding:.35rem .6rem; border-bottom:1px solid var(--rule); white-space:nowrap; }
+tr:last-child td { border-bottom:0; }
+tr.changed td { background:var(--vc-tint); }
 .ok { color:var(--ok); } .bad { color:var(--bad); } .warn { color:var(--warn); }
 .muted { color:var(--muted); }
-.bar { display:inline-block; height:.55rem; border-radius:2px; background:var(--ok);
+.bar { display:inline-block; height:.5rem; border-radius:2px; background:var(--ok);
        vertical-align:middle; min-width:1px; }
-.bar.bad { background:var(--bad); }
+.bar.warn { background:var(--warn); }
 .note { color:var(--muted); font-size:12px; margin:.4rem 0 0; }
-svg.spark { display:block; margin:.2rem 0 .4rem; max-width:100%; }
-.spark .grid { stroke:var(--line); stroke-width:1; }
-.spark .axis { fill:var(--muted); font:10px ui-monospace,SFMono-Regular,Menlo,monospace; }
-.spark .line { fill:none; stroke:var(--fg); stroke-width:1.5; }
-.spark .pt { fill:var(--muted); }
-.spark .pt.vc { fill:var(--vc); }
-.spark .hit { fill:transparent; }
-code { font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace; }
+svg { display:block; max-width:100%; height:auto; }
+svg.spark { margin:.2rem 0 .6rem; }
+svg.ov { margin:.8rem 0 .2rem; }
+.grid { stroke:var(--rule); stroke-width:1; }
+.grid.mid { stroke-dasharray:3 3; }
+.grid.dark { stroke:var(--rule-dark); }
+.axis { fill:var(--muted); font:10px var(--mono); }
+.tline { fill:none; stroke-width:2; }
+.ov .tline { stroke-width:2.1; }
+.ov .tline.steady { stroke:var(--steady); stroke-width:1.4; }
+.pt.err { fill:var(--panel); stroke:var(--bad); stroke-width:1.8; }
+.pt.vc { fill:var(--vc); }
+.hit { fill:transparent; }
+.leader { stroke:var(--rule-dark); stroke-width:1; stroke-dasharray:2 3; }
+.slabel .name { font:11px var(--mono); }
+.slabel .val { font:10px var(--mono); fill:var(--muted); }
+.legend { display:flex; gap:1.4rem; flex-wrap:wrap; align-items:center;
+          margin-top:2rem; padding-top:1rem; border-top:1px solid var(--rule);
+          font:11px var(--mono); color:var(--muted); }
+.legend .attrib { margin-left:auto; }
+.dot { display:inline-block; width:8px; height:8px; border-radius:50%;
+       vertical-align:-1px; margin-right:.3rem; }
+.dot.run { background:var(--ink); }
+.dot.err { background:var(--panel); border:2px solid var(--bad); }
+.dot.vc { background:var(--vc); }
+code { font:12px/1.4 var(--mono); }
 """
+
+#: Categorical series palette — six hues at pinned lightness/chroma, assigned
+#: to movers in subject order and cycled if there are ever more than six.
+_SERIES = (
+    "oklch(0.55 0.15 255)",
+    "oklch(0.55 0.15 315)",
+    "oklch(0.6 0.14 40)",
+    "oklch(0.5 0.12 165)",
+    "oklch(0.52 0.13 205)",
+    "oklch(0.5 0.15 350)",
+)
 
 
 def render(records: Iterable[dict], *, limit: int = DEFAULT_LIMIT, generated: str = "") -> str:
     """The trend page, as one self-contained HTML document."""
     all_points = points(records)
     grouped = by_subject(all_points)
-    body = [
-        "<h1>Agent eval trend</h1>",
-        f'<p class="sub">Quality per subject over time, annotated with the model and '
-        f"prompt version each run used. {len(all_points)} run(s) across "
-        f"{len(grouped)} subject(s).{(' Generated ' + html.escape(generated)) if generated else ''}"
-        "</p>",
-    ]
+    windows = {s: series[-limit:] if limit else list(series) for s, series in grouped.items()}
+    colours = _colours(windows)
+
+    body = [_masthead(windows, all_points, generated)]
     if not grouped:
         body.append('<p class="note">No run records found.</p>')
-    for subject, series in grouped.items():
-        body.append(_section(subject, series, limit))
+    else:
+        body.append(
+            "<section class='card'><h2>All subjects, one axis</h2>"
+            + _overview(windows, colours)
+            + "</section>"
+        )
+        sections = [
+            _section(subject, grouped[subject], windows[subject], colours) for subject in grouped
+        ]
+        body.append(
+            "<div class='card'>" + "".join(sections) + _legend(windows) + "</div>"
+        )
     return (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -242,11 +324,243 @@ def render(records: Iterable[dict], *, limit: int = DEFAULT_LIMIT, generated: st
     )
 
 
-def _section(subject: str, series: Sequence[Point], limit: int) -> str:
-    changes = version_changes(series)
-    shown = list(reversed(series))[:limit]
-    dropped = len(series) - len(shown)
-    spark = _sparkline(subject, series[len(series) - len(shown) :], changes)
+def _movers(windows: dict[str, list[Point]]) -> set[str]:
+    """A subject moved if its displayed window is not flat.
+
+    The threshold is deliberately zero: any movement at all earns a colour,
+    because the colour is what routes the eye to the series worth reading.
+    """
+    return {
+        s
+        for s, w in windows.items()
+        if len(w) >= 2 and max(p.rate for p in w) > min(p.rate for p in w)
+    }
+
+
+def _colours(windows: dict[str, list[Point]]) -> dict[str, str]:
+    return {s: _SERIES[i % len(_SERIES)] for i, s in enumerate(sorted(_movers(windows)))}
+
+
+def _masthead(windows: dict[str, list[Point]], all_points: Sequence[Point], generated: str) -> str:
+    """Leads with the overall pass rate: latest run of each subject, stated as
+    such — not an average of averages."""
+    latest = [w[-1] for w in windows.values() if w]
+    total = sum(p.total for p in latest)
+    passed = sum(p.passed for p in latest)
+    overall = passed / total if total else 0.0
+    perfect = sum(1 for p in latest if p.total and p.rate == 1)
+    spend = sum((p.cost_usd for p in all_points), Decimal(0))
+
+    stats = [
+        ("runs", str(len(all_points))),
+        ("subjects", str(len(windows))),
+        ("billed spend", f"${spend:.2f}"),
+    ]
+    if generated:
+        stats.append(("generated", html.escape(generated)))
+    stats_html = "".join(f"<div><dt>{k}</dt><dd>{v}</dd></div>" for k, v in stats)
+
+    overall_html = ""
+    if latest:
+        overall_html = (
+            "<div class='overall'><div class='k'>overall pass rate</div>"
+            f"<span class='big'>{_axis_pct(overall)}</span> "
+            f"<span class='cases'>{passed}/{total} cases</span>"
+            f"<div class='meter'><div style='width:{overall * 100:.1f}%'></div></div>"
+            f"<div class='cases'>latest run of each subject · "
+            f"{perfect}/{len(latest)} at 100%</div></div>"
+        )
+    return (
+        "<header class='card masthead'><div><h1>Agent eval trend</h1>"
+        "<p class='tagline'>A score moved — what moved with it? "
+        "Every point carries its model, prompt and code version.</p>"
+        f"<dl class='stats'>{stats_html}</dl></div>"
+        + overall_html
+        + "</header>"
+    )
+
+
+# --- the all-subjects overview -------------------------------------------
+
+#: Overview geometry in viewBox units: canvas, then the plot rectangle
+#: (left, top, right, bottom). 700→900 is the right-edge label gutter.
+_OV_W, _OV_H = 900, 400
+_OV_PLOT = (52, 20, 700, 310)
+
+#: Minimum vertical gap between right-edge label blocks, in viewBox units.
+_LABEL_GAP = 26
+
+
+def _overview(windows: dict[str, list[Point]], colours: dict[str, str]) -> str:
+    """Every subject on one fixed 0–100% axis, x linear over real time.
+
+    Movers get a categorical colour and a right-edge label; steady subjects
+    draw grey and unlabelled underneath. Without that split, fourteen lines
+    stacked on 100% are unreadable — the grey lines are the proof that nothing
+    is hidden, the coloured ones are the reading.
+    """
+    left, top, right, bottom = _OV_PLOT
+    everything = [p for w in windows.values() for p in w]
+    if not everything:
+        return ""
+    t0 = min(p.started_at for p in everything)
+    t1 = max(p.started_at for p in everything)
+    span = (t1 - t0).total_seconds() or 1.0
+
+    def x(when: datetime) -> float:
+        return round(left + (when - t0).total_seconds() / span * (right - left), 1)
+
+    def y(rate: float) -> float:
+        return round(bottom - rate * (bottom - top), 1)
+
+    parts = []
+    for frac in (0.0, 0.25, 0.5, 0.75, 1.0):
+        cls = "grid dark" if frac == 1.0 else "grid"
+        parts.append(f"<line class='{cls}' x1='{left}' y1='{y(frac)}' x2='{right}' y2='{y(frac)}'/>")
+        parts.append(
+            f"<text class='axis' x='{left - 6}' y='{y(frac) + 3}' "
+            f"text-anchor='end'>{_axis_pct(frac)}</text>"
+        )
+    for i in range(5):
+        when = t0 + (t1 - t0) * i / 4
+        anchor = "start" if i == 0 else "end" if i == 4 else "middle"
+        tick_x = x(when)
+        parts.append(
+            f"<text class='axis' x='{tick_x}' y='{bottom + 20}' text-anchor='{anchor}'>"
+            f"{when.strftime('%H:%M')}"
+            f"<tspan x='{tick_x}' dy='12'>{when.strftime('%m-%d')}</tspan></text>"
+        )
+
+    # Steady subjects first so movers draw over them.
+    order = sorted(windows, key=lambda s: (s in colours, s))
+    labels = []
+    for subject in order:
+        window = windows[subject]
+        colour = colours.get(subject)
+        pts = " ".join(f"{x(p.started_at)},{y(p.rate)}" for p in window)
+        cls = "tline" if colour else "tline steady"
+        stroke = f" stroke='{colour}'" if colour else ""
+        mover = " mover" if colour else ""
+        series = [f"<g class='series{mover}' data-subject='{html.escape(subject)}'>"]
+        if len(window) > 1:
+            series.append(f"<polyline class='{cls}'{stroke} points='{pts}'/>")
+        changes = version_changes(window)
+        for i, p in enumerate(window):
+            # Steady series stay quiet: endpoint only — except a version change
+            # or an errored run, which matter precisely when the score did not
+            # move (a pin bump with no score change is the reassuring finding).
+            if not colour and i < len(window) - 1 and p.run_id not in changes and not p.errored:
+                continue
+            series.append(_ov_dot(p, x(p.started_at), y(p.rate), colour, changes))
+        series.append("</g>")
+        parts.append("".join(series))
+        if colour:
+            last = window[-1]
+            labels.append((subject, colour, x(last.started_at), y(last.rate), last))
+
+    parts.append(_edge_labels(labels))
+    return (
+        f"<svg class='ov' role='img' width='{_OV_W}' height='{_OV_H}' "
+        f"viewBox='0 0 {_OV_W} {_OV_H}' aria-label='Pass rate over time for every subject; "
+        "subjects that moved are coloured and labelled, steady subjects are grey'>"
+        + "".join(parts)
+        + "</svg>"
+    )
+
+
+def _ov_dot(p: Point, cx: float, cy: float, colour: str | None, changes: dict[str, list[str]]) -> str:
+    moved = changes.get(p.run_id, [])
+    tip = (
+        f"{p.subject} — {p.started_at.strftime('%Y-%m-%d %H:%M')} — "
+        f"{_axis_pct(p.rate)} ({p.passed}/{p.total})"
+    )
+    if p.errored:
+        tip += f" — {p.errored} errored"
+    if moved:
+        tip += " — " + "; ".join(moved)
+    if moved:
+        dot = f"<circle class='pt vc' cx='{cx}' cy='{cy}' r='4'/>"
+    elif p.errored:
+        dot = f"<circle class='pt err' cx='{cx}' cy='{cy}' r='3.6'/>"
+    else:
+        fill = colour or "var(--steady)"
+        dot = f"<circle class='pt' fill='{fill}' cx='{cx}' cy='{cy}' r='2'/>"
+    return (
+        f"<g><title>{html.escape(tip)}</title>"
+        f"<circle class='hit' cx='{cx}' cy='{cy}' r='7'/>{dot}</g>"
+    )
+
+
+def _edge_labels(labels: list[tuple[str, str, float, float, Point]]) -> str:
+    """Right-gutter labels, staggered to a minimum vertical gap and joined to
+    their endpoints by dashed leaders."""
+    if not labels:
+        return ""
+    _, top, _, bottom = _OV_PLOT
+    lo, hi = top + 6, _OV_H - _LABEL_GAP
+    desired = [min(max(item[3], lo), hi) for item in labels]
+    ys = _stagger(desired, _LABEL_GAP, lo, hi)
+    out = []
+    for (subject, colour, px, py, last), ly in zip(labels, ys, strict=True):
+        name = html.escape(subject)
+        out.append(
+            f"<line class='leader' x1='{px + 4}' y1='{py}' x2='{_OV_PLOT[2] + 8}' y2='{ly}'/>"
+            f"<g class='slabel' data-subject='{name}'>"
+            f"<text class='name' fill='{colour}' x='{_OV_PLOT[2] + 12}' y='{ly + 3}'>{name}</text>"
+            f"<text class='val' x='{_OV_PLOT[2] + 12}' y='{ly + 16}'>"
+            f"{_axis_pct(last.rate)} {last.passed}/{last.total}</text></g>"
+        )
+    return "".join(out)
+
+
+def _stagger(desired: Sequence[float], gap: float, lo: float, hi: float) -> list[float]:
+    """Nudge label positions apart until no two are within `gap`, keeping each
+    as close to its desired position as the constraint allows."""
+    order = sorted(range(len(desired)), key=lambda i: desired[i])
+    ys = list(desired)
+    prev = lo - gap
+    for i in order:
+        ys[i] = max(ys[i], prev + gap)
+        prev = ys[i]
+    prev = hi + gap
+    for i in reversed(order):
+        ys[i] = min(ys[i], prev - gap)
+        prev = ys[i]
+    return ys
+
+
+# --- per-subject sections -------------------------------------------------
+
+#: Sparkline geometry in viewBox units: full column width so 40 runs at the
+#: display limit stay separable. Plot rectangle is (left, top, right, bottom).
+_SPARK_W, _SPARK_H = 900, 122
+_PLOT = (46, 16, 880, 92)
+
+#: Below this many runs a line chart is a shape with no trend in it — two
+#: points always draw a clean slope. Draw nothing rather than something
+#: misleading.
+_MIN_SPARK_RUNS = 3
+
+
+def _axis_bottom(min_rate: float) -> float:
+    """The y-axis floor: the top is always pinned at 100%, the bottom hugs the
+    data in 0.05 steps with headroom.
+
+    Hugging both ends (the RC1-268 design) let a flat 100% render mid-chart,
+    visually identical to a subject oscillating — the printed labels did not
+    undo the impression. Pinning the top puts "perfect" on the ceiling and
+    makes a dip a real dip; printing both labels now defends only the bottom.
+    """
+    return min(0.95, max(0.0, math.floor((min_rate - 0.08) * 20) / 20))
+
+
+def _section(
+    subject: str, series: Sequence[Point], window: Sequence[Point], colours: dict[str, str]
+) -> str:
+    changes = version_changes(list(window))
+    shown = list(reversed(window))
+    dropped = len(series) - len(window)
+    spark = _sparkline(subject, window, changes, colours.get(subject))
 
     rows = []
     for point in shown:
@@ -269,46 +583,55 @@ def _section(subject: str, series: Sequence[Point], limit: int) -> str:
             f"{dropped} older run(s) not displayed.</p>"
         )
     return (
-        f"<h2>{html.escape(subject)}</h2>{spark}<div class='wrap'><table>"
+        f"<section class='subject' id='s-{html.escape(subject)}'>"
+        + _section_head(subject, window)
+        + spark
+        + "<div class='wrap'><table>"
         "<tr><th>run</th><th>pass rate</th><th>cases</th><th>model</th>"
         "<th>prompt</th><th>cost</th><th>changed since previous</th></tr>"
         + "".join(rows)
-        + f"</table></div>{note}"
+        + f"</table></div>{note}</section>"
     )
 
 
-#: Sparkline geometry in viewBox units: overall size, then the plot rectangle
-#: (left, top, right, bottom). The left gutter holds the y-axis labels.
-_SPARK_W, _SPARK_H = 260, 64
-_PLOT = (36, 8, 254, 56)
+def _section_head(subject: str, window: Sequence[Point]) -> str:
+    """Name, model, run count — then the current rate and its direction, so the
+    reader knows which way things went before the chart is read."""
+    last = window[-1]
+    parts = [f"<h2>{html.escape(subject)}</h2>"]
+    if last.model:
+        parts.append(f"<span class='pill'>{html.escape(_short(last.model))}</span>")
+    parts.append(f"<span class='runsn'>{len(window)} run(s)</span><span class='grow'></span>")
+    cls = "ok" if last.rate >= 0.9 else "warn" if last.rate >= 0.5 else "bad"
+    parts.append(f"<span class='now {cls}'>{_axis_pct(last.rate)}</span>")
+    if len(window) >= 2:
+        delta = (last.rate - window[-2].rate) * 100
+        if abs(delta) < 0.05:
+            parts.append("<span class='chip flat'>no change</span>")
+        else:
+            arrow = "up" if delta > 0 else "down"
+            parts.append(f"<span class='chip {arrow}'>{delta:+.1f} pts</span>")
+    return "<div class='shead'>" + "".join(parts) + "</div>"
 
-#: Below this many runs a line chart is a shape with no trend in it — two
-#: points always draw a clean slope. Draw nothing rather than something
-#: misleading.
-_MIN_SPARK_RUNS = 3
 
-#: Minimum y-axis span, in pass-rate terms. The axis hugs the data so a small
-#: dip stays legible at this size, but a hugged axis can exaggerate — the
-#: printed min/max labels are what keep that honest, and a floor on the span
-#: keeps a near-flat series from turning noise into cliffs.
-_MIN_SPAN = 0.05
-
-
-def _sparkline(subject: str, series: Sequence[Point], changes: dict[str, list[str]]) -> str:
+def _sparkline(
+    subject: str, series: Sequence[Point], changes: dict[str, list[str]], colour: str | None
+) -> str:
     """Pass rate over the table's window, oldest → newest, as inline SVG.
 
-    Runs where a version changed get a larger accented dot; every dot carries
-    an SVG `<title>` (date, rate, what moved), which is a native hover tooltip
-    with no JavaScript — the page stays a single self-contained file.
+    Three dot states (see the page legend): an ordinary run, a run with errored
+    cases (hollow, in the bad colour — an eval that crashed is not an eval that
+    scored low), and a run where a version changed (accented — the attribution
+    the page exists for). Every dot carries an SVG `<title>`, a native hover
+    tooltip with no JavaScript.
     """
     if len(series) < _MIN_SPARK_RUNS:
         return ""
     left, top, right, bottom = _PLOT
-    lo, hi = min(p.rate for p in series), max(p.rate for p in series)
-    if hi - lo < _MIN_SPAN:
-        lo = max(0.0, lo - (_MIN_SPAN - (hi - lo)) / 2)
-        hi = min(1.0, lo + _MIN_SPAN)
-        lo = max(0.0, hi - _MIN_SPAN)
+    lo = _axis_bottom(min(p.rate for p in series))
+    hi = 1.0
+    mid = (lo + hi) / 2
+    stroke = colour or "var(--steady)"
 
     def x(i: int) -> float:
         return round(left + i * (right - left) / (len(series) - 1), 1)
@@ -323,27 +646,71 @@ def _sparkline(subject: str, series: Sequence[Point], changes: dict[str, list[st
             f"{point.started_at.strftime('%Y-%m-%d %H:%M')} — "
             f"{_axis_pct(point.rate)} ({point.passed}/{point.total})"
         )
+        if point.errored:
+            tip += f" — {point.errored} errored"
         if moved:
             tip += " — " + "; ".join(moved)
-        cls, radius = ("pt vc", 3.5) if moved else ("pt", 2)
+        if moved:
+            dot = f"<circle class='pt vc' cx='{x(i)}' cy='{y(point.rate)}' r='4'/>"
+        elif point.errored:
+            dot = f"<circle class='pt err' cx='{x(i)}' cy='{y(point.rate)}' r='3.6'/>"
+        else:
+            dot = f"<circle class='pt' fill='{stroke}' cx='{x(i)}' cy='{y(point.rate)}' r='2.6'/>"
         dots.append(
             f"<g><title>{html.escape(tip)}</title>"
-            f"<circle class='hit' cx='{x(i)}' cy='{y(point.rate)}' r='8'/>"
-            f"<circle class='{cls}' cx='{x(i)}' cy='{y(point.rate)}' r='{radius}'/></g>"
+            f"<circle class='hit' cx='{x(i)}' cy='{y(point.rate)}' r='8'/>{dot}</g>"
         )
 
     path = " ".join(f"{x(i)},{y(p.rate)}" for i, p in enumerate(series))
+    fill = ""
+    if colour:
+        # Movers only: under a flat line the fill is a slab that reads as a
+        # bar chart, so steady subjects get none.
+        fill = (
+            f"<polygon fill='{stroke}' fill-opacity='0.1' "
+            f"points='{path} {x(len(series) - 1)},{bottom} {x(0)},{bottom}'/>"
+        )
+    first, last = series[0], series[-1]
     return (
         f"<svg class='spark' role='img' width='{_SPARK_W}' height='{_SPARK_H}' "
         f"viewBox='0 0 {_SPARK_W} {_SPARK_H}' "
         f"aria-label='Pass rate per run for {html.escape(subject)}, oldest to newest'>"
-        f"<line class='grid' x1='{left}' y1='{top}' x2='{right}' y2='{top}'/>"
+        f"<line class='grid dark' x1='{left}' y1='{top}' x2='{right}' y2='{top}'/>"
+        f"<line class='grid mid' x1='{left}' y1='{y(mid)}' x2='{right}' y2='{y(mid)}'/>"
         f"<line class='grid' x1='{left}' y1='{bottom}' x2='{right}' y2='{bottom}'/>"
-        f"<text class='axis' x='{left - 5}' y='{top + 3}' "
-        f"text-anchor='end'>{_axis_pct(hi)}</text>"
-        f"<text class='axis' x='{left - 5}' y='{bottom + 3}' "
-        f"text-anchor='end'>{_axis_pct(lo)}</text>"
-        f"<polyline class='line' points='{path}'/>" + "".join(dots) + "</svg>"
+        f"<text class='axis' x='{left - 6}' y='{top + 3}' text-anchor='end'>{_axis_pct(hi)}</text>"
+        f"<text class='axis' x='{left - 6}' y='{y(mid) + 3}' text-anchor='end'>{_axis_pct(mid)}</text>"
+        f"<text class='axis' x='{left - 6}' y='{bottom + 3}' text-anchor='end'>{_axis_pct(lo)}</text>"
+        f"<text class='axis' x='{left}' y='{bottom + 16}'>"
+        f"{first.started_at.strftime('%Y-%m-%d %H:%M')}</text>"
+        f"<text class='axis' x='{right}' y='{bottom + 16}' text-anchor='end'>"
+        f"{last.started_at.strftime('%Y-%m-%d %H:%M')}</text>"
+        + fill
+        + f"<polyline class='tline' stroke='{stroke}' points='{path}'/>"
+        + "".join(dots)
+        + "</svg>"
+    )
+
+
+def _legend(windows: dict[str, list[Point]]) -> str:
+    """The dot vocabulary, plus the attribution status said in words.
+
+    When `version_changes` fires nowhere in the window, the accent dot never
+    renders and the page's central claim is invisible — the legend says so
+    rather than staying silent. Same rule as the display cap: an absence the
+    reader cannot distinguish from an omission must be stated.
+    """
+    marked = sum(len(version_changes(w)) for w in windows.values())
+    if marked:
+        attrib = f"{marked} run(s) marked above carry a version change."
+    else:
+        attrib = "No version changes in this window — every movement above is unattributed."
+    return (
+        "<footer class='legend'>"
+        "<span><span class='dot run'></span>run</span>"
+        "<span><span class='dot err'></span>cases errored</span>"
+        "<span><span class='dot vc'></span>model / prompt / code version changed</span>"
+        f"<span class='attrib'>{attrib}</span></footer>"
     )
 
 
@@ -352,11 +719,13 @@ def _axis_pct(rate: float) -> str:
 
 
 def _rate_cell(point: Point) -> str:
+    """Rate colour says how good; the bad colour is reserved for errors, so a
+    low score and a crashed run stop looking like the same finding."""
     pct = point.rate * 100
     width = max(1, round(point.rate * 60))
-    cls = "ok" if point.rate == 1 else "bad"
+    cls = "ok" if point.rate == 1 else "warn"
     return (
-        f"<span class='bar {'' if point.rate == 1 else 'bad'}' style='width:{width}px'></span> "
+        f"<span class='bar {'' if point.rate == 1 else 'warn'}' style='width:{width}px'></span> "
         f"<span class='{cls}'>{pct:.0f}%</span>"
     )
 

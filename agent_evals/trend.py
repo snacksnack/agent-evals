@@ -253,6 +253,7 @@ tr.changed td { background:var(--vc-tint); }
        vertical-align:middle; min-width:1px; }
 .bar.warn { background:var(--warn); }
 .note { color:var(--muted); font-size:12px; margin:.4rem 0 0; }
+.desc { color:var(--muted); font-size:12.5px; margin:-.15rem 0 .5rem; max-width:52rem; }
 svg { display:block; max-width:100%; height:auto; }
 svg.spark { margin:.2rem 0 .6rem; }
 svg.ov { margin:.8rem 0 .2rem; }
@@ -393,20 +394,35 @@ _SERIES = (
 )
 
 
-def render(records: Iterable[dict], *, limit: int = DEFAULT_LIMIT, generated: str = "") -> str:
-    """The trend page, as one self-contained HTML document."""
+def render(
+    records: Iterable[dict],
+    *,
+    limit: int = DEFAULT_LIMIT,
+    generated: str = "",
+    descriptions: dict[str, str] | None = None,
+) -> str:
+    """The trend page, as one self-contained HTML document.
+
+    `descriptions` maps a subject to one sentence saying what it measures
+    (RC1-272). The copy is presentation, so it arrives as an argument rather
+    than travelling in the records — the store schema and the consumer repos
+    know nothing about it. A subject without an entry renders no line: new
+    subjects appear on the page before anyone writes copy for them.
+    """
     all_points = points(records)
     grouped = by_subject(all_points)
     windows = {s: series[-limit:] if limit else list(series) for s, series in grouped.items()}
     colours = _colours(windows)
+    descriptions = descriptions or {}
 
     body = [_masthead(windows, all_points, generated)]
     if not grouped:
         body.append('<p class="note">No run records found.</p>')
     else:
-        body.append(_overview_card(windows, colours))
+        body.append(_overview_card(windows, colours, descriptions))
         sections = [
-            _section(subject, grouped[subject], windows[subject], colours) for subject in grouped
+            _section(subject, grouped[subject], windows[subject], colours, descriptions)
+            for subject in grouped
         ]
         body.append(
             "<div class='card'>" + "".join(sections) + _legend(windows) + "</div>"
@@ -420,7 +436,9 @@ def render(records: Iterable[dict], *, limit: int = DEFAULT_LIMIT, generated: st
     )
 
 
-def _overview_card(windows: dict[str, list[Point]], colours: dict[str, str]) -> str:
+def _overview_card(
+    windows: dict[str, list[Point]], colours: dict[str, str], descriptions: dict[str, str]
+) -> str:
     """The overview chart with its interactions' chrome.
 
     The controls and readout ship `hidden` and the inline script reveals
@@ -442,9 +460,11 @@ def _overview_card(windows: dict[str, list[Point]], colours: dict[str, str]) -> 
     for subject, window in windows.items():
         last = window[-1]
         colour = colours.get(subject, "var(--steady)")
+        desc = descriptions.get(subject)
+        tip = f" title='{html.escape(desc)}'" if desc else ""
         chips.append(
             f"<button class='chipbtn' data-subject='{html.escape(subject)}' "
-            "aria-pressed='false'>"
+            f"aria-pressed='false'{tip}>"
             f"<span class='dot' style='background:{colour}'></span>"
             f"{html.escape(subject)} <span>{_axis_pct(last.rate)}</span></button>"
         )
@@ -736,7 +756,11 @@ def _axis_bottom(min_rate: float) -> float:
 
 
 def _section(
-    subject: str, series: Sequence[Point], window: Sequence[Point], colours: dict[str, str]
+    subject: str,
+    series: Sequence[Point],
+    window: Sequence[Point],
+    colours: dict[str, str],
+    descriptions: dict[str, str],
 ) -> str:
     changes = version_changes(list(window))
     shown = list(reversed(window))
@@ -763,9 +787,12 @@ def _section(
             f'<p class="note">Showing the {len(shown)} most recent of {len(series)} runs; '
             f"{dropped} older run(s) not displayed.</p>"
         )
+    desc = descriptions.get(subject)
+    desc_html = f"<p class='desc'>{html.escape(desc)}</p>" if desc else ""
     return (
         f"<section class='subject' id='s-{html.escape(subject)}'>"
         + _section_head(subject, window)
+        + desc_html
         + spark
         + "<div class='wrap'><table>"
         "<tr><th>run</th><th>pass rate</th><th>cases</th><th>model</th>"

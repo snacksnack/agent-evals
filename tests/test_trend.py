@@ -293,6 +293,26 @@ def test_the_legend_says_when_no_movement_is_attributed():
     assert "1 run(s) marked above carry a version change" in loud
 
 
+def test_a_subject_description_renders_when_supplied_and_not_otherwise():
+    """One sentence saying what a subject measures (RC1-272). It is copy, so
+    it arrives as an argument — the records and the store know nothing of it —
+    and a subject without an entry renders no line rather than a placeholder."""
+    records = [_record(i) for i in range(3)]
+    told = trend.render(records, descriptions={"demo": "What this measures."})
+    assert "<p class='desc'>What this measures.</p>" in told
+    assert "title='What this measures.'" in told, "the legend chip explains the name on hover"
+    untold = trend.render(records, descriptions={"other-subject": "irrelevant"})
+    assert "class='desc'" not in untold and "irrelevant" not in untold
+
+
+def test_a_description_is_escaped_as_data():
+    page = trend.render(
+        [_record(0)], descriptions={"demo": "<img onerror=x> & \"quotes\""}
+    )
+    assert "<img" not in page
+    assert "&lt;img" in page
+
+
 def test_an_empty_log_renders_a_page_rather_than_crashing():
     page = trend.render([])
     assert "No run records found" in page

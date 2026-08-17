@@ -140,6 +140,55 @@ def test_the_page_is_self_contained_and_escapes_what_it_renders():
     assert "http://" not in page and "https://" not in page, "no external assets"
 
 
+def _svg(page):
+    """The one sparkline on a single-subject page, or None if there isn't one."""
+    if "<svg" not in page:
+        return None
+    return page[page.index("<svg") : page.index("</svg>")]
+
+
+def test_a_sparkline_appears_only_at_three_or_more_runs():
+    """Two points always draw a clean slope — below the threshold the chart
+    would be a shape with no trend in it, so nothing is drawn instead (RC1-268)."""
+    assert _svg(trend.render([_record(i) for i in range(2)])) is None
+    assert _svg(trend.render([_record(i) for i in range(3)])) is not None
+
+
+def test_sparkline_marks_exactly_the_runs_where_a_version_changed():
+    records = [
+        _record(0),
+        _record(1, prompt="p-2"),
+        _record(2, prompt="p-2"),
+        _record(3, prompt="p-2", model="claude-opus-5"),
+    ]
+    svg = _svg(trend.render(records))
+    assert svg.count("pt vc") == 2, "one marker per version-change run, no more"
+    assert "prompt: p-1 → p-2" in svg, "the marker's title names what changed"
+    assert "model: claude-sonnet-5 → claude-opus-5" in svg
+
+
+def test_sparkline_axis_bounds_are_printed_not_implied():
+    records = [_record(0, passed=1, failed=1), _record(1), _record(2)]
+    svg = _svg(trend.render(records))
+    assert ">50%<" in svg and ">100%<" in svg
+
+
+def test_a_flat_series_still_gets_an_honest_axis():
+    """Every run at 100%: the axis pads to a minimum span rather than dividing
+    by a zero range, and the padded bounds are printed like any others."""
+    svg = _svg(trend.render([_record(i) for i in range(3)]))
+    assert ">95%<" in svg and ">100%<" in svg
+
+
+def test_the_sparkline_shows_the_same_window_as_the_table():
+    """Chart and table must describe the same runs — a chart drawn from runs the
+    table dropped would attribute a slope to rows the reader cannot see."""
+    records = [_record(0, passed=0, failed=2)] + [_record(i) for i in range(1, 5)]
+    svg = _svg(trend.render(records, limit=3))
+    assert svg.count("class='pt") == 3, "one dot per displayed run"
+    assert ">0%<" not in svg, "the dropped 0% run does not set the axis floor"
+
+
 def test_an_empty_log_renders_a_page_rather_than_crashing():
     page = trend.render([])
     assert "No run records found" in page

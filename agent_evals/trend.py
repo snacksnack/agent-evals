@@ -367,15 +367,17 @@ _JS = """
   ov.addEventListener('mouseleave', function () {
     if (readout) readout.textContent = status();
   });
-  function wire(id, fn) {
-    var b = document.getElementById(id);
-    if (b) b.addEventListener('click', fn);
-    return b;
+  function seg(onId, offId, fn) {
+    var on = document.getElementById(onId), off = document.getElementById(offId);
+    if (!on) return;
+    on.addEventListener('click', function () {
+      fn(); pressed(on, true); pressed(off, false); apply();
+    });
   }
-  var bAll = wire('b-all', function () { movers = false; pressed(bAll, true); pressed(bMov, false); apply(); });
-  var bMov = wire('b-movers', function () { movers = true; pressed(bAll, false); pressed(bMov, true); apply(); });
-  var bTime = wire('b-time', function () { byrun = false; pressed(bTime, true); pressed(bRun, false); apply(); });
-  var bRun = wire('b-run', function () { byrun = true; pressed(bTime, false); pressed(bRun, true); apply(); });
+  seg('b-all', 'b-movers', function () { movers = false; });
+  seg('b-movers', 'b-all', function () { movers = true; });
+  seg('b-time', 'b-run', function () { byrun = false; });
+  seg('b-run', 'b-time', function () { byrun = true; });
 })();
 """
 

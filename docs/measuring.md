@@ -61,6 +61,14 @@ The script renders `site/index.html` from the store and force-pushes it as a
 single parentless commit to `gh-pages`. Nothing else to do; there is no CI
 step, by design.
 
+## Reading the result
+
+Every runner exits CI-shaped: `0` every case passed, `1` a case failed its
+characteristics — the subject answered badly — and `2` a case errored, meaning
+the subject produced nothing to score. `2` outranks `1` deliberately: "the
+thing under test is broken" and "the thing under test answered badly" need
+different people looking at them.
+
 ## When it fails
 
 **The run refuses to start, naming the store.** An unreachable store fails

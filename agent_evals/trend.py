@@ -184,10 +184,10 @@ def _short(value: str | None) -> str:
 
 _CSS = """
 :root { --bg:#fff; --fg:#1a1a1a; --muted:#666; --line:#e4e4e7;
-        --ok:#15803d; --bad:#b91c1c; --warn:#a16207; --mark:#f5f3ff; }
+        --ok:#15803d; --bad:#b91c1c; --warn:#a16207; --mark:#f5f3ff; --vc:#7c3aed; }
 @media (prefers-color-scheme: dark) {
   :root { --bg:#111; --fg:#ededed; --muted:#9a9a9a; --line:#2a2a2a;
-          --ok:#4ade80; --bad:#f87171; --warn:#fbbf24; --mark:#1e1b31; }
+          --ok:#4ade80; --bad:#f87171; --warn:#fbbf24; --mark:#1e1b31; --vc:#8b5cf6; }
 }
 body { background:var(--bg); color:var(--fg); margin:0 auto; padding:2rem 1.25rem;
        max-width:60rem; font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
@@ -207,6 +207,13 @@ tr.changed td { background:var(--mark); }
        vertical-align:middle; min-width:1px; }
 .bar.bad { background:var(--bad); }
 .note { color:var(--muted); font-size:12px; margin:.4rem 0 0; }
+svg.spark { display:block; margin:.2rem 0 .4rem; max-width:100%; }
+.spark .grid { stroke:var(--line); stroke-width:1; }
+.spark .axis { fill:var(--muted); font:10px ui-monospace,SFMono-Regular,Menlo,monospace; }
+.spark .line { fill:none; stroke:var(--fg); stroke-width:1.5; }
+.spark .pt { fill:var(--muted); }
+.spark .pt.vc { fill:var(--vc); }
+.spark .hit { fill:transparent; }
 code { font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace; }
 """
 
@@ -239,6 +246,7 @@ def _section(subject: str, series: Sequence[Point], limit: int) -> str:
     changes = version_changes(series)
     shown = list(reversed(series))[:limit]
     dropped = len(series) - len(shown)
+    spark = _sparkline(subject, series[len(series) - len(shown) :], changes)
 
     rows = []
     for point in shown:
@@ -261,12 +269,86 @@ def _section(subject: str, series: Sequence[Point], limit: int) -> str:
             f"{dropped} older run(s) not displayed.</p>"
         )
     return (
-        f"<h2>{html.escape(subject)}</h2><div class='wrap'><table>"
+        f"<h2>{html.escape(subject)}</h2>{spark}<div class='wrap'><table>"
         "<tr><th>run</th><th>pass rate</th><th>cases</th><th>model</th>"
         "<th>prompt</th><th>cost</th><th>changed since previous</th></tr>"
         + "".join(rows)
         + f"</table></div>{note}"
     )
+
+
+#: Sparkline geometry in viewBox units: overall size, then the plot rectangle
+#: (left, top, right, bottom). The left gutter holds the y-axis labels.
+_SPARK_W, _SPARK_H = 260, 64
+_PLOT = (36, 8, 254, 56)
+
+#: Below this many runs a line chart is a shape with no trend in it — two
+#: points always draw a clean slope. Draw nothing rather than something
+#: misleading.
+_MIN_SPARK_RUNS = 3
+
+#: Minimum y-axis span, in pass-rate terms. The axis hugs the data so a small
+#: dip stays legible at this size, but a hugged axis can exaggerate — the
+#: printed min/max labels are what keep that honest, and a floor on the span
+#: keeps a near-flat series from turning noise into cliffs.
+_MIN_SPAN = 0.05
+
+
+def _sparkline(subject: str, series: Sequence[Point], changes: dict[str, list[str]]) -> str:
+    """Pass rate over the table's window, oldest → newest, as inline SVG.
+
+    Runs where a version changed get a larger accented dot; every dot carries
+    an SVG `<title>` (date, rate, what moved), which is a native hover tooltip
+    with no JavaScript — the page stays a single self-contained file.
+    """
+    if len(series) < _MIN_SPARK_RUNS:
+        return ""
+    left, top, right, bottom = _PLOT
+    lo, hi = min(p.rate for p in series), max(p.rate for p in series)
+    if hi - lo < _MIN_SPAN:
+        lo = max(0.0, lo - (_MIN_SPAN - (hi - lo)) / 2)
+        hi = min(1.0, lo + _MIN_SPAN)
+        lo = max(0.0, hi - _MIN_SPAN)
+
+    def x(i: int) -> float:
+        return round(left + i * (right - left) / (len(series) - 1), 1)
+
+    def y(rate: float) -> float:
+        return round(bottom - (rate - lo) / (hi - lo) * (bottom - top), 1)
+
+    dots = []
+    for i, point in enumerate(series):
+        moved = changes.get(point.run_id, [])
+        tip = (
+            f"{point.started_at.strftime('%Y-%m-%d %H:%M')} — "
+            f"{_axis_pct(point.rate)} ({point.passed}/{point.total})"
+        )
+        if moved:
+            tip += " — " + "; ".join(moved)
+        cls, radius = ("pt vc", 3.5) if moved else ("pt", 2)
+        dots.append(
+            f"<g><title>{html.escape(tip)}</title>"
+            f"<circle class='hit' cx='{x(i)}' cy='{y(point.rate)}' r='8'/>"
+            f"<circle class='{cls}' cx='{x(i)}' cy='{y(point.rate)}' r='{radius}'/></g>"
+        )
+
+    path = " ".join(f"{x(i)},{y(p.rate)}" for i, p in enumerate(series))
+    return (
+        f"<svg class='spark' role='img' width='{_SPARK_W}' height='{_SPARK_H}' "
+        f"viewBox='0 0 {_SPARK_W} {_SPARK_H}' "
+        f"aria-label='Pass rate per run for {html.escape(subject)}, oldest to newest'>"
+        f"<line class='grid' x1='{left}' y1='{top}' x2='{right}' y2='{top}'/>"
+        f"<line class='grid' x1='{left}' y1='{bottom}' x2='{right}' y2='{bottom}'/>"
+        f"<text class='axis' x='{left - 5}' y='{top + 3}' "
+        f"text-anchor='end'>{_axis_pct(hi)}</text>"
+        f"<text class='axis' x='{left - 5}' y='{bottom + 3}' "
+        f"text-anchor='end'>{_axis_pct(lo)}</text>"
+        f"<polyline class='line' points='{path}'/>" + "".join(dots) + "</svg>"
+    )
+
+
+def _axis_pct(rate: float) -> str:
+    return f"{rate * 100:.1f}".rstrip("0").rstrip(".") + "%"
 
 
 def _rate_cell(point: Point) -> str:

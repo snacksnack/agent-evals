@@ -10,7 +10,10 @@ answered the question *"how do you know the output is any good?"*
 The measured answer is public: every suite run lands in a shared store and
 renders to the **[quality trend page](https://snacksnack.github.io/agent-evals/)**
 — score per subject over time, each point attributed to a model, prompt and code
-version. `docs/trend.md` explains what the page claims and how it publishes.
+version. [`docs/trend.md`](docs/trend.md) explains what the page claims and how
+it publishes; [`docs/measuring.md`](docs/measuring.md) is the runbook for taking
+a measurement end to end — per-repo suite commands, key handling, the publish
+step, and what to check when the store is unreachable.
 
 ## The idea in one paragraph
 
@@ -115,13 +118,36 @@ Consumed by git ref. It is a library — nothing here is deployed.
 
 ```toml
 dependencies = [
-    "agent-evals @ git+https://github.com/snacksnack/agent-evals@v0.1.0",
+    "agent-evals[sql] @ git+https://github.com/snacksnack/agent-evals@v0.3.0",
 ]
 ```
 
-## Status
+The `sql` extra brings `psycopg2` for the shared Postgres store; without it the
+local JSONL store still works. Every consumer pins a tag, so a harness change is
+deliberately two PRs — one here, one bump per consumer — and a pin bump that
+moves a score is itself a finding (RC1-261 established the parity check).
 
-Extracted from `launch-planner-agent`, where it currently measures MCP tool
-routing, status narratives, and deterministic groundedness across four subjects.
-The design decisions and their reasoning live in that repo's `docs/decisions.md`
-(ADR-0030 through ADR-0034) and `docs/judging.md`.
+## Who uses it
+
+Five repos consume the library, thirteen subjects between them. Each repo owns
+its subjects, cases and fixtures — an eval is a test, and tests live beside the
+thing they test — and each documents how to run its own suite:
+
+| Consumer | Subjects |
+| --- | --- |
+| [`launch-planner-agent`](https://github.com/snacksnack/launch-planner-agent) | `groundedness`, `status-narrative`, `status-narrative-fallback`, `health`, `tool-selection`, `work-breakdown`, `dependency`, `raid` |
+| [`tpm-automation-platform`](https://github.com/snacksnack/tpm-automation-platform) | `drift-digest`, `drift-digest-allclear` |
+| [`pr-request-agent`](https://github.com/snacksnack/pr_agent) | `pr-review` (planted-defect recall) |
+| [`n8n-stakeholder-status-email`](https://github.com/snacksnack/n8n-stakeholder-status-email) | `stakeholder-status-email` |
+| [`n8n-concert-intelligence`](https://github.com/snacksnack/n8n-concert-intelligence-agent) | `concert-preview` |
+
+**What it costs.** Each repo splits its suite into a free half (deterministic
+checks, runnable in CI with no credential — the property ADR-0031 protects) and
+a billed half. A full sweep of every billed suite costs a few dollars, and every
+record carries its own token usage and exact `Decimal` cost, so spend is a query
+over the store rather than a guess.
+
+The harness was extracted from `launch-planner-agent` (RC1-261), and the design
+history stays there: `docs/decisions.md` ADR-0030 through ADR-0037, and
+`docs/judging.md` for how the judge was validated. The storage decision and its
+post-mortem live here, in [`docs/trend.md`](docs/trend.md).

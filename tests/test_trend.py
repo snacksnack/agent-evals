@@ -141,10 +141,15 @@ def test_the_page_is_self_contained_and_escapes_what_it_renders():
 
 
 def _svg(page):
-    """The one sparkline on a single-subject page, or None if there isn't one."""
-    if "<svg" not in page:
+    """The one sparkline on a single-subject page, or None if there isn't one.
+
+    The overview chart also draws an `<svg>`, so this keys on the spark class
+    rather than the first tag on the page.
+    """
+    if "class='spark'" not in page:
         return None
-    return page[page.index("<svg") : page.index("</svg>")]
+    start = page.index("class='spark'")
+    return page[start : page.index("</svg>", start)]
 
 
 def test_a_sparkline_appears_only_at_three_or_more_runs():
@@ -170,14 +175,17 @@ def test_sparkline_marks_exactly_the_runs_where_a_version_changed():
 def test_sparkline_axis_bounds_are_printed_not_implied():
     records = [_record(0, passed=1, failed=1), _record(1), _record(2)]
     svg = _svg(trend.render(records))
-    assert ">50%<" in svg and ">100%<" in svg
+    assert ">40%<" in svg and ">100%<" in svg, "floor hugs the data in 0.05 steps, top is 100%"
 
 
-def test_a_flat_series_still_gets_an_honest_axis():
-    """Every run at 100%: the axis pads to a minimum span rather than dividing
-    by a zero range, and the padded bounds are printed like any others."""
+def test_the_axis_top_is_pinned_at_100_percent():
+    """A flat perfect series sits on the plot ceiling, where perfect belongs
+    (RC1-270). The RC1-268 hugged axis drew it mid-chart, visually identical
+    to a subject oscillating — the printed labels did not undo the impression."""
     svg = _svg(trend.render([_record(i) for i in range(3)]))
-    assert ">95%<" in svg and ">100%<" in svg
+    assert ">90%<" in svg and ">100%<" in svg, "the floor is derived, both bounds printed"
+    top = float(trend._PLOT[1])
+    assert svg.count(f"cy='{top}'") >= 3, "every 100% point sits on the top edge"
 
 
 def test_the_sparkline_shows_the_same_window_as_the_table():
@@ -187,6 +195,76 @@ def test_the_sparkline_shows_the_same_window_as_the_table():
     svg = _svg(trend.render(records, limit=3))
     assert svg.count("class='pt") == 3, "one dot per displayed run"
     assert ">0%<" not in svg, "the dropped 0% run does not set the axis floor"
+
+
+def test_a_run_with_errors_is_drawn_differently_from_a_low_score():
+    """An eval that crashed and an eval that failed are different findings
+    (RC1-270): errored runs draw hollow in the bad colour, ordinary runs
+    filled. `stakeholder-status-email` at 0/4 with 4 errored must not look
+    like a subject that merely scored zero."""
+    svg = _svg(trend.render([_record(0), _record(1, passed=1, errored=3), _record(2)]))
+    assert svg.count("pt err") == 1, "exactly the errored run is hollow"
+    assert "3 errored" in svg, "...and its tooltip says how many"
+
+
+def test_the_masthead_rate_is_the_latest_run_of_each_subject():
+    """108/115-style aggregate: latest run per subject, pooled by cases — not
+    an average of averages, and history does not dilute the present."""
+    old_bad = _record(0, passed=0, failed=2)
+    now_good = _record(1)  # 2/2
+    other = _record(0, passed=1, failed=1)  # 1/2, only run
+    other["subject_version"]["subject"] = "other"
+    page = trend.render([old_bad, now_good, other])
+    assert "3/4 cases" in page, "latest runs only: 2/2 and 1/2"
+    assert ">75%</span>" in page
+    assert "1/2 at 100%" in page
+
+
+def test_the_overview_separates_movers_from_steady_subjects():
+    """Movers get a colour and a right-edge label; steady subjects stay grey
+    and unlabelled. Without the split, every line stacks on 100% and the chart
+    is a thicket — with it, the grey lines still prove nothing is hidden."""
+    moved = [_record(0), _record(1, passed=1, failed=1), _record(2)]
+    steady = [_record(i) for i in range(3)]
+    for r in steady:
+        r["subject_version"]["subject"] = "steady"
+        r["run_id"] += "-steady"
+    page = trend.render(moved + steady)
+    ov = page[page.index("class='ov'") : page.index("</svg>")]
+    assert "tline steady" in ov, "the flat subject draws grey"
+    assert ov.count("class='slabel'") == 1, "only the mover is labelled"
+    assert "data-subject='demo'><text" in ov.replace("\n", "")
+
+
+def test_overview_labels_are_never_stacked_closer_than_the_minimum_gap():
+    """Six movers can all end within a few percent of each other; their
+    right-edge labels stagger apart rather than overprinting."""
+    records = []
+    for i in range(6):
+        name = f"subject-{i}"
+        for n in range(3):
+            r = _record(n, passed=19 if n else 18 - i, failed=1 if n else 2 + i)
+            r["subject_version"]["subject"] = name
+            r["run_id"] = f"{name}-{n}"
+            records.append(r)
+    page = trend.render(records)
+    import re
+
+    ys = sorted(float(m) for m in re.findall(r"class='name'[^>]* y='([\d.]+)'", page))
+    assert len(ys) == 6
+    gaps = [b - a for a, b in zip(ys, ys[1:], strict=False)]
+    assert all(g >= trend._LABEL_GAP - 1e-6 for g in gaps), gaps
+
+
+def test_the_legend_says_when_no_movement_is_attributed():
+    """`version_changes` firing nowhere means the accent dot never renders and
+    the page's central claim is invisible — the legend states the absence
+    rather than staying silent (RC1-270, same rule as the display cap)."""
+    quiet = trend.render([_record(i) for i in range(3)])
+    assert "No version changes in this window" in quiet
+    loud = trend.render([_record(0), _record(1, prompt="p-2"), _record(2, prompt="p-2")])
+    assert "No version changes" not in loud
+    assert "1 run(s) marked above carry a version change" in loud
 
 
 def test_an_empty_log_renders_a_page_rather_than_crashing():

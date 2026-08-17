@@ -49,6 +49,10 @@ PRICES: dict[str, ModelPrice] = {
     "claude-sonnet-5": ModelPrice(
         "3.00", "15.00", note="introductory 2.00/10.00 through 2026-08-31; standard used here"
     ),
+    # The incident summarizer's Lambda pins this older Sonnet (RC1-267) — its
+    # first runs recorded $0, which is the exact failure mode this module's
+    # raise-on-unknown exists to prevent from staying silent.
+    "claude-sonnet-4-6": ModelPrice("3.00", "15.00"),
     "claude-haiku-4-5": ModelPrice("1.00", "5.00"),
 }
 

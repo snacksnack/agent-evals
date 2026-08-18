@@ -129,13 +129,13 @@ moves a score is itself a finding (RC1-261 established the parity check).
 
 ## Who uses it
 
-Five repos consume the library, thirteen subjects between them. Each repo owns
+Five repos consume the library, fifteen subjects between them. Each repo owns
 its subjects, cases and fixtures — an eval is a test, and tests live beside the
 thing they test — and each documents how to run its own suite:
 
 | Consumer | Subjects |
 | --- | --- |
-| [`launch-planner-agent`](https://github.com/snacksnack/launch-planner-agent) | `groundedness`, `status-narrative`, `status-narrative-fallback`, `health`, `tool-selection`, `work-breakdown`, `dependency`, `raid` |
+| [`launch-planner-agent`](https://github.com/snacksnack/launch-planner-agent) | `groundedness`, `status-narrative`, `status-narrative-fallback`, `health`, `tool-selection`, `work-breakdown`, `dependency`, `raid`, `spec-structural`, `spec-review` |
 | [`tpm-automation-platform`](https://github.com/snacksnack/tpm-automation-platform) | `drift-digest`, `drift-digest-allclear` |
 | [`pr-request-agent`](https://github.com/snacksnack/pr_agent) | `pr-review` (planted-defect recall) |
 | [`n8n-stakeholder-status-email`](https://github.com/snacksnack/n8n-stakeholder-status-email) | `stakeholder-status-email` |

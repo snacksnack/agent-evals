@@ -39,15 +39,17 @@ Run each from its repo root.
 
 | Repo | Suite command | Free half | Key, and where it is read from |
 | --- | --- | --- | --- |
-| [`launch-planner-agent`](https://github.com/snacksnack/launch-planner-agent) | `uv run evals run <subject>` | `groundedness`, `status-narrative-fallback`, `health` | `LPA_ANTHROPIC_API_KEY`, from `.env` |
+| [`launch-planner-agent`](https://github.com/snacksnack/launch-planner-agent) | `uv run evals run <subject>` | `groundedness`, `status-narrative-fallback`, `health`, `spec-structural` | `LPA_ANTHROPIC_API_KEY`, from `.env` |
 | [`tpm-automation-platform`](https://github.com/snacksnack/tpm-automation-platform) | `python -m evals run drift-digest` | `drift-digest-allclear` (gates CI) | `ANTHROPIC_API_KEY`, from `.env` |
 | [`pr-request-agent`](https://github.com/snacksnack/pr_agent) | `python -m evals` | `--list` (corpus only) | `ANTHROPIC_API_KEY`, from `.env` |
 | [`n8n-stakeholder-status-email`](https://github.com/snacksnack/n8n-stakeholder-status-email) | `python -m evals` | `pytest` (layer 1) | `ANTHROPIC_API_KEY`, exported — no `.env` is read |
 | [`n8n-concert-intelligence`](https://github.com/snacksnack/n8n-concert-intelligence-agent) | `python -m evals` | `pytest` (layer 1) | `ANTHROPIC_API_KEY`, exported — no `.env` is read |
 
 `launch-planner-agent`'s billed subjects are `tool-selection`,
-`status-narrative`, `work-breakdown`, `dependency` and `raid`; the other four
-repos have one billed subject each. A full sweep of every billed suite costs a few dollars,
+`status-narrative`, `work-breakdown`, `dependency`, `raid` and `spec-review`
+(RC1-292 — planted-defect recall per rubric category over the spec-gate corpus,
+plus false-positive restraint on the good spec and the fabricated-quote rate);
+the other four repos have one billed subject each. A full sweep of every billed suite costs a few dollars,
 and every record carries its own exact cost, so the running total is a query
 rather than a guess.
 

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Weekly full sweep, ~$1.45/run measured (RC1-315). Monday 09:30 so the
+     daily job's 09:00 run has finished. __HOME__ is substituted by
+     scripts/install_launchd.sh; a missed interval runs on wake. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.hihelloreid.agent-evals.weekly</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>__HOME__/programming/personal/agent-evals/scripts/scheduled_eval.sh</string>
+    <string>weekly</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key><integer>1</integer>
+    <key>Hour</key><integer>9</integer>
+    <key>Minute</key><integer>30</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/agent-evals/weekly.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/agent-evals/weekly.log</string>
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>

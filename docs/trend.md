@@ -133,6 +133,41 @@ as an argument — the renderer stays pure, and a page rendered without a
 clock simply omits the labels. A subject nobody has measured lately says
 so, instead of looking like either a broken chart or a fresh one.
 
+## Scheduled runs: an amendment, not a reversal (RC1-315)
+
+This document says writes happen because a human chose to take a measurement,
+never CI — and by 2026-08-27 the cost of that purity was visible on the page:
+no runs for ten days, and the in-progress KPI work looking stalest exactly
+where a dense series matters most. So RC1-315 adds **scheduled runs from the
+dev machine via launchd**: the free deterministic `kpi-ledger` suite daily,
+and a full sweep weekly (~$1.45/sweep measured from the store, ~$6/month —
+daily would be ~$44/month spent mostly drawing flat lines).
+
+What changes and what does not:
+
+- **Change-triggered human runs remain the primary measurement.** The evals
+  measure the effect of changes; a schedule re-running unchanged code mostly
+  produces flat points. What the schedule buys is a **freshness and drift
+  baseline** — the page stays visibly alive, and a provider-side model change
+  now has runs positioned to catch it.
+- **"Never CI" stands, and was never about scheduling.** It was about where
+  the credential lives. launchd runs on the same developer machine the manual
+  runs use, reading `EVAL_DATABASE_URL` from the same shell profile; GitHub
+  Actions still holds nothing.
+- "Every record exists because a human chose to take a measurement" weakens
+  to: every record exists because a human chose a measurement **policy** —
+  once, deliberately, and written down here.
+
+The pieces: `scripts/scheduled_eval.sh` (`daily` | `weekly`) runs the suites
+from `docs/measuring.md` and then `publish_trend.sh`; the plist templates in
+`launchd/` schedule it (daily 09:00, Monday 09:30) and
+`scripts/install_launchd.sh` installs them. launchd runs a missed interval on
+wake, so a closed laptop means a late run, not a gap. Logs land in
+`~/Library/Logs/agent-evals/`. A suite whose cases fail is a finding and the
+sweep continues; suites needing an exported `ANTHROPIC_API_KEY` are skipped
+with a logged notice when the key is absent — no silent caps, in either
+direction.
+
 ## What the page claims, and what it does not
 
 One question: **a score moved — what moved with it?** Every point carries its

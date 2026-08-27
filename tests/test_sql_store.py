@@ -22,6 +22,7 @@ from decimal import Decimal
 
 import pytest
 
+from agent_evals import trend
 from agent_evals.record import (
     CaseResult,
     CharacteristicResult,
@@ -101,6 +102,8 @@ def test_duplicate_run_ids_are_rejected(store):
 def test_update_is_refused_by_the_database(store):
     """Acceptance criterion (RC1-263). Raw SQL, not the class API: the point is
     that mutation fails even for a caller that goes around `SqlRunStore`."""
+    # Local on purpose: the suite skips on a missing DSN, not a missing driver,
+    # so collection must survive without the [sql] extra installed.
     import psycopg2
 
     store.append(_record())
@@ -114,7 +117,7 @@ def test_update_is_refused_by_the_database(store):
 
 
 def test_delete_is_refused_by_the_database(store):
-    import psycopg2
+    import psycopg2  # local on purpose — see test_update_is_refused_by_the_database
 
     store.append(_record())
     conn = store._connection()
@@ -152,8 +155,6 @@ def test_latest_filters_by_subject(store):
 
 def test_raw_dicts_feed_the_trend_view(store):
     """`trend.points` works off raw dicts — the seam RC1-263 must not move."""
-    from agent_evals import trend
-
     store.append(_record())
     points = trend.points(store.raw())
     assert len(points) == 1

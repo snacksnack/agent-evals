@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 
+import anthropic
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent_evals.rubric import JUDGED_KEYS, RUBRIC_VERSION, Score, rubric_text
@@ -88,8 +89,6 @@ def client_for(api_key: str | None) -> object:
     would work in exactly one repo. Passing the resolved key in keeps the
     calibration machinery portable, which is the entire reason it was extracted.
     """
-    import anthropic
-
     if not api_key:
         raise RuntimeError(
             "no API key supplied. The judge drives a real model; the caller resolves "

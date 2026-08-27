@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from agent_evals import trend
+from agent_evals.sql_store import SqlRunStore
 
 #: One sentence per subject saying what is being measured (RC1-272). Lives
 #: here rather than in the records or the renderer: the copy is presentation
@@ -91,8 +92,6 @@ SUBJECT_DESCRIPTIONS = {
 
 def fetch(dsn: str) -> tuple[list[dict], list[str]]:
     """Every record in the store, oldest first, plus notes for the page."""
-    from agent_evals.sql_store import SqlRunStore
-
     store = SqlRunStore(dsn)
     try:
         records = store.raw()

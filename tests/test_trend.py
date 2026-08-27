@@ -282,6 +282,47 @@ def test_overview_labels_are_never_stacked_closer_than_the_minimum_gap():
     assert all(g >= trend._LABEL_GAP - 1e-6 for g in gaps), gaps
 
 
+def test_the_overview_defaults_to_the_run_number_axis():
+    """Runs are deliberate and sparse (RC1-314): on a time axis ten quiet days
+    render as a stretch of nothing that reads as a broken chart. The time
+    layout survives as the toggle, pre-rendered in `data-` attributes."""
+    import re
+
+    page = trend.render([_record(n) for n in (0, 1, 10)])  # irregular gaps
+    ov = page[page.index("class='ov'") : page.index("</svg>")]
+    m = re.search(r"points='([^']*)' data-tpts='([^']*)' data-rpts='([^']*)'", ov)
+    assert m.group(1) == m.group(3), "the server-drawn line uses the run layout"
+    assert m.group(2) != m.group(3), "...and the time layout is genuinely different"
+    assert "<g class='ticks-run'>" in ov, "run ticks show without JavaScript"
+    assert "class='ticks-time' style='display:none'" in ov
+    assert "id='b-run' aria-pressed='true'" in page, "the pressed control matches"
+
+
+def test_each_subject_states_when_it_last_ran():
+    """Freshness in words (RC1-314): the run-number axis no longer implies it,
+    and a subject nobody measured lately must say so. `now` is an argument,
+    not a clock read — without it the label is absent and `render` stays pure."""
+    records = [_record(i) for i in range(3)]
+    page = trend.render(records, now=_WHEN + timedelta(days=10, hours=3))
+    assert "last run 10 days ago" in page
+    assert "last run today" in trend.render(records, now=_WHEN + timedelta(hours=3))
+    assert "last run yesterday" in trend.render(records, now=_WHEN + timedelta(days=1, hours=3))
+    assert "last run" not in trend.render(records)
+
+
+def test_a_single_run_subject_is_a_marked_point_not_a_speck():
+    """A one-run subject draws no line, so its only dot is enlarged in the
+    overview rather than rendering at the steady endpoint size (RC1-314)."""
+    lone = _record(0)
+    lone["subject_version"]["subject"] = "lone"
+    lone["run_id"] = "lone-0"
+    page = trend.render([lone] + [_record(i) for i in range(3)])
+    ov = page[page.index("class='ov'") : page.index("</svg>")]
+    assert "r='3.5'" in ov, "the lone dot is enlarged"
+    without = trend.render([_record(i) for i in range(3)])
+    assert "r='3.5'" not in without, "multi-run subjects keep the quiet endpoint dot"
+
+
 def test_the_legend_says_when_no_movement_is_attributed():
     """`version_changes` firing nowhere means the accent dot never renders and
     the page's central claim is invisible — the legend states the absence

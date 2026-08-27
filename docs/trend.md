@@ -113,10 +113,25 @@ property itself:
 The tests assert exactly that, rather than the absence of a `<script>`
 tag. What the inline script buys is four ways of asking a question of the
 chart the server already drew — isolate a subject, drop the flat series,
-re-index the x-axis by run number, and a hover readout — not new data. With
-JavaScript disabled the page still renders every chart, table and label;
-the interactions degrade, nothing disappears, and the controls that would
-be dead are never shown.
+lay the x-axis back out by real time, and a hover readout — not new data.
+With JavaScript disabled the page still renders every chart, table and
+label; the interactions degrade, nothing disappears, and the controls that
+would be dead are never shown.
+
+## The default axis states runs, the labels state time (RC1-314)
+
+The overview originally defaulted to the time axis with run-number as the
+toggle. Runs are deliberate and sparse, and the time axis punished exactly
+that: ten quiet days rendered as a stretch of nothing that read as a broken
+chart, and a single-run subject as a lone speck. So the defaults swapped —
+**run number is the server-drawn layout** (and the no-JS fallback), real
+time is the toggle, and a single-run subject's only dot draws enlarged.
+
+What the time axis used to imply, words now state: each subject's header
+carries **"last run N days ago"**, anchored to a `now` passed into `render`
+as an argument — the renderer stays pure, and a page rendered without a
+clock simply omits the labels. A subject nobody has measured lately says
+so, instead of looking like either a broken chart or a fresh one.
 
 ## What the page claims, and what it does not
 

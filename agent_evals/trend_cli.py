@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 from agent_evals import trend
@@ -123,8 +124,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  note: {note}", file=sys.stderr)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(UTC)
     page = trend.render(
-        records, limit=args.limit, generated=_stamp(), descriptions=SUBJECT_DESCRIPTIONS
+        records,
+        limit=args.limit,
+        generated=now.strftime("%Y-%m-%d %H:%M UTC"),
+        descriptions=SUBJECT_DESCRIPTIONS,
+        now=now,
     )
     if notes:
         page = page.replace(
@@ -136,12 +142,6 @@ def main(argv: list[str] | None = None) -> int:
     args.out.write_text(page)
     print(f"{len(records)} record(s) -> {args.out}")
     return 0
-
-
-def _stamp() -> str:
-    from datetime import UTC, datetime
-
-    return datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ which usually means the seed set is too easy. `KappaResult.note` says so, and
 
 from __future__ import annotations
 
+import random
 from collections import Counter
 from dataclasses import dataclass
 
@@ -160,8 +161,6 @@ def bootstrap(
     Seeded, so the same labels always produce the same interval — a confidence
     interval that moves when you re-read it is not evidence.
     """
-    import random
-
     shared = [
         seed_id
         for seed_id in sorted(set(human) & set(judge))

@@ -158,6 +158,16 @@ What changes and what does not:
   to: every record exists because a human chose a measurement **policy** —
   once, deliberately, and written down here.
 
+The pieces: `scripts/scheduled_eval.sh` (`daily` | `weekly`) runs the suites
+from `docs/measuring.md` and then `publish_trend.sh`; the plist templates in
+`launchd/` schedule it (daily 09:00, Monday 09:30) and
+`scripts/install_launchd.sh` installs them. launchd runs a missed interval on
+wake, so a closed laptop means a late run, not a gap. Logs land in
+`~/Library/Logs/agent-evals/`. A suite whose cases fail is a finding and the
+sweep continues; suites needing an exported `ANTHROPIC_API_KEY` are skipped
+with a logged notice when the key is absent — no silent caps, in either
+direction.
+
 ## What the page claims, and what it does not
 
 One question: **a score moved — what moved with it?** Every point carries its

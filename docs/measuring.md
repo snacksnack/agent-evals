@@ -44,6 +44,7 @@ Run each from its repo root.
 | [`pr-request-agent`](https://github.com/snacksnack/pr_agent) | `python -m evals` | `--list` (corpus only) | `ANTHROPIC_API_KEY`, from `.env` |
 | [`n8n-stakeholder-status-email`](https://github.com/snacksnack/n8n-stakeholder-status-email) | `python -m evals` | `pytest` (layer 1) | `ANTHROPIC_API_KEY`, exported — no `.env` is read |
 | [`n8n-concert-intelligence`](https://github.com/snacksnack/n8n-concert-intelligence-agent) | `python -m evals` | `pytest` (layer 1) | `ANTHROPIC_API_KEY`, exported — no `.env` is read |
+| [`ai-incident-summarizer`](https://github.com/snacksnack/ai-incident-summarizer) (local dir `ai_powered_incident_alert_summarizer`) | `python -m evals` | — | `ANTHROPIC_API_KEY`, exported — the Lambda uses Secrets Manager, the eval deliberately doesn't touch AWS (RC1-267) |
 
 `launch-planner-agent`'s billed subjects are `tool-selection`,
 `status-narrative`, `work-breakdown`, `dependency`, `raid` and `spec-review`
@@ -62,6 +63,15 @@ cd agent-evals && ./scripts/publish_trend.sh
 The script renders `site/index.html` from the store and force-pushes it as a
 single parentless commit to `gh-pages`. Nothing else to do; there is no CI
 step, by design.
+
+## Scheduled runs (RC1-315)
+
+launchd on this machine runs `scripts/scheduled_eval.sh` — the free
+`kpi-ledger` suite daily at 09:00 and the full sweep above Mondays at 09:30 —
+publishing the page after each. Install with `scripts/install_launchd.sh`;
+logs are in `~/Library/Logs/agent-evals/`. Change-triggered manual runs
+remain the primary measurement; `docs/trend.md` ("Scheduled runs: an
+amendment, not a reversal") reconciles this with the never-CI rule.
 
 ## Reading the result
 

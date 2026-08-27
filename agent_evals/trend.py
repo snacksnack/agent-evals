@@ -305,7 +305,7 @@ code { font:12px/1.4 var(--mono); }
 #: The page's only JavaScript, inlined — one file, no external request, no
 #: credential (the constraint RC1-271 restated; docs/trend.md has the
 #: reasoning). Everything here asks questions of the chart the server already
-#: drew: isolate a subject, drop the flat series, re-index x by run number,
+#: drew: isolate a subject, drop the flat series, lay x back out by real time,
 #: read a point without waiting for a native tooltip. With scripting disabled
 #: none of it runs and nothing on the page disappears — the controls and
 #: readout ship `hidden` and are only revealed from here.
@@ -318,7 +318,7 @@ _JS = """
   document.querySelectorAll('.jsonly').forEach(function (el) { el.hidden = false; });
   var readout = document.getElementById('readout');
   var rest = readout ? readout.textContent : '';
-  var iso = null, movers = false, byrun = false;
+  var iso = null, movers = false, byrun = true;
   function pressed(btn, on) { if (btn) btn.setAttribute('aria-pressed', String(on)); }
   function status() {
     return iso ? 'isolated: ' + iso + ' — click again to release' : rest;
@@ -400,6 +400,7 @@ def render(
     limit: int = DEFAULT_LIMIT,
     generated: str = "",
     descriptions: dict[str, str] | None = None,
+    now: datetime | None = None,
 ) -> str:
     """The trend page, as one self-contained HTML document.
 
@@ -408,6 +409,10 @@ def render(
     than travelling in the records — the store schema and the consumer repos
     know nothing about it. A subject without an entry renders no line: new
     subjects appear on the page before anyone writes copy for them.
+
+    `now` anchors the per-subject freshness labels ("last run N days ago",
+    RC1-314). It arrives as an argument rather than being read from the clock
+    so the function stays pure; without it no label renders.
     """
     all_points = points(records)
     grouped = by_subject(all_points)
@@ -421,7 +426,7 @@ def render(
     else:
         body.append(_overview_card(windows, colours, descriptions))
         sections = [
-            _section(subject, grouped[subject], windows[subject], colours, descriptions)
+            _section(subject, grouped[subject], windows[subject], colours, descriptions, now)
             for subject in grouped
         ]
         body.append(
@@ -453,8 +458,8 @@ def _overview_card(
         f"<button id='b-all' aria-pressed='true'>all {len(windows)}</button>"
         "<button id='b-movers' aria-pressed='false'>movers only</button></div>"
         "<div class='seg'>"
-        "<button id='b-time' aria-pressed='true'>by time</button>"
-        "<button id='b-run' aria-pressed='false'>by run #</button></div></div>"
+        "<button id='b-run' aria-pressed='true'>by run #</button>"
+        "<button id='b-time' aria-pressed='false'>by time</button></div></div>"
     )
     chips = []
     for subject, window in windows.items():
@@ -546,18 +551,22 @@ _LABEL_GAP = 26
 
 
 def _overview(windows: dict[str, list[Point]], colours: dict[str, str]) -> str:
-    """Every subject on one fixed 0–100% axis, x linear over real time.
+    """Every subject on one fixed 0–100% axis, x indexed by run number.
 
     Movers get a categorical colour and a right-edge label; steady subjects
     draw grey and unlabelled underneath. Without that split, fourteen lines
     stacked on 100% are unreadable — the grey lines are the proof that nothing
     is hidden, the coloured ones are the reading.
 
-    Every x-position is emitted twice: laid out by real time (the default and
-    the no-JS fallback) and by run number (`data-` attributes the inline
-    script swaps in). Neither axis is correct alone — on a time axis a
-    debugging burst compresses into a sliver; on a run axis three sweeps and
-    thirteen runs look like the same amount of history (RC1-271).
+    Every x-position is emitted twice: laid out by run number (the default and
+    the no-JS fallback) and by real time (`data-` attributes the inline script
+    swaps in). Neither axis is correct alone — on a run axis three sweeps and
+    thirteen runs look like the same amount of history; on a time axis a
+    debugging burst compresses into a sliver (RC1-271). Run number won the
+    default (RC1-314) because runs are deliberate and sparse: on a time axis
+    ten quiet days render as a stretch of nothing that reads as a broken
+    chart, when the honest statement — made by the freshness labels — is that
+    nobody took a measurement.
     """
     left, top, right, bottom = _OV_PLOT
     everything = [p for w in windows.values() for p in w]
@@ -600,7 +609,7 @@ def _overview(windows: dict[str, list[Point]], colours: dict[str, str]) -> str:
             f"{when.strftime('%H:%M')}"
             f"<tspan x='{tick_x}' dy='12'>{when.strftime('%m-%d')}</tspan></text>"
         )
-    parts.append(f"<g class='ticks-time'>{''.join(time_ticks)}</g>")
+    parts.append(f"<g class='ticks-time' style='display:none'>{''.join(time_ticks)}</g>")
     run_ticks = []
     for i in sorted({round(k * (maxn - 1) / 4) for k in range(5)}):
         anchor = "start" if i == 0 else "end" if i == maxn - 1 else "middle"
@@ -608,7 +617,7 @@ def _overview(windows: dict[str, list[Point]], colours: dict[str, str]) -> str:
             f"<text class='axis' x='{rx(i)}' y='{bottom + 20}' "
             f"text-anchor='{anchor}'>run {i + 1}</text>"
         )
-    parts.append(f"<g class='ticks-run' style='display:none'>{''.join(run_ticks)}</g>")
+    parts.append(f"<g class='ticks-run'>{''.join(run_ticks)}</g>")
 
     # Steady subjects first so movers draw over them.
     order = sorted(windows, key=lambda s: (s in colours, s))
@@ -629,7 +638,7 @@ def _overview(windows: dict[str, list[Point]], colours: dict[str, str]) -> str:
                 f"over {len(window)} runs"
             )
             series.append(
-                f"<polyline class='{cls}'{stroke} points='{tpts}' "
+                f"<polyline class='{cls}'{stroke} points='{rpts}' "
                 f"data-tpts='{tpts}' data-rpts='{rpts}' data-tip='{tip}'/>"
             )
         changes = version_changes(window)
@@ -639,7 +648,12 @@ def _overview(windows: dict[str, list[Point]], colours: dict[str, str]) -> str:
             # move (a pin bump with no score change is the reassuring finding).
             if not colour and i < len(window) - 1 and p.run_id not in changes and not p.errored:
                 continue
-            series.append(_ov_dot(p, x(p.started_at), rx(i), y(p.rate), colour, changes))
+            series.append(
+                _ov_dot(
+                    p, x(p.started_at), rx(i), y(p.rate), colour, changes,
+                    lone=len(window) == 1,
+                )
+            )
         series.append("</g>")
         parts.append("".join(series))
         if colour:
@@ -665,6 +679,7 @@ def _ov_dot(
     cy: float,
     colour: str | None,
     changes: dict[str, list[str]],
+    lone: bool = False,
 ) -> str:
     moved = changes.get(p.run_id, [])
     tip = (
@@ -676,14 +691,16 @@ def _ov_dot(
     if p.advisory_failed:
         tip += f" — {p.advisory_failed} advisory"
     tip += " — " + "; ".join(moved) if moved else " — no version change"
-    coords = f"cx='{tx}' data-tx='{tx}' data-rx='{rx}' cy='{cy}'"
+    coords = f"cx='{rx}' data-tx='{tx}' data-rx='{rx}' cy='{cy}'"
     if moved:
         dot = f"<circle class='pt vc' {coords} r='4'/>"
     elif p.errored:
         dot = f"<circle class='pt err' {coords} r='3.6'/>"
     else:
         fill = colour or "var(--steady)"
-        dot = f"<circle class='pt' fill='{fill}' {coords} r='2'/>"
+        # A single-run subject draws no line, so its only dot must read as a
+        # marked point rather than a speck (RC1-314).
+        dot = f"<circle class='pt' fill='{fill}' {coords} r='{3.5 if lone else 2}'/>"
     return (
         f"<g><title>{html.escape(tip)}</title>"
         f"<circle class='hit' {coords} r='7'/>{dot}</g>"
@@ -703,7 +720,7 @@ def _edge_labels(labels: list[tuple[str, str, float, float, float, Point]]) -> s
     for (subject, colour, px, rpx, py, last), ly in zip(labels, ys, strict=True):
         name = html.escape(subject)
         out.append(
-            f"<line class='leader' data-subject='{name}' x1='{px + 4}' "
+            f"<line class='leader' data-subject='{name}' x1='{rpx + 4}' "
             f"data-tx1='{px + 4}' data-rx1='{rpx + 4}' y1='{py}' "
             f"x2='{_OV_PLOT[2] + 8}' y2='{ly}'/>"
             f"<g class='slabel' data-subject='{name}'>"
@@ -761,6 +778,7 @@ def _section(
     window: Sequence[Point],
     colours: dict[str, str],
     descriptions: dict[str, str],
+    now: datetime | None,
 ) -> str:
     changes = version_changes(list(window))
     shown = list(reversed(window))
@@ -791,7 +809,7 @@ def _section(
     desc_html = f"<p class='desc'>{html.escape(desc)}</p>" if desc else ""
     return (
         f"<section class='subject' id='s-{html.escape(subject)}'>"
-        + _section_head(subject, window)
+        + _section_head(subject, window, now)
         + desc_html
         + spark
         + "<div class='wrap'><table>"
@@ -802,14 +820,23 @@ def _section(
     )
 
 
-def _section_head(subject: str, window: Sequence[Point]) -> str:
-    """Name, model, run count — then the current rate and its direction, so the
-    reader knows which way things went before the chart is read."""
+def _section_head(subject: str, window: Sequence[Point], now: datetime | None) -> str:
+    """Name, model, run count, freshness — then the current rate and its
+    direction, so the reader knows which way things went before the chart is
+    read.
+
+    Freshness is stated in words (RC1-314) because the run-number axis no
+    longer implies it: a subject nobody has measured lately must say so
+    rather than look like a subject measured yesterday.
+    """
     last = window[-1]
     parts = [f"<h2>{html.escape(subject)}</h2>"]
     if last.model:
         parts.append(f"<span class='pill'>{html.escape(_short(last.model))}</span>")
-    parts.append(f"<span class='runsn'>{len(window)} run(s)</span><span class='grow'></span>")
+    parts.append(f"<span class='runsn'>{len(window)} run(s)</span>")
+    if now is not None and last.started_at != datetime.min:
+        parts.append(f"<span class='runsn'>· {_freshness(last.started_at, now)}</span>")
+    parts.append("<span class='grow'></span>")
     cls = "ok" if last.rate >= 0.9 else "warn" if last.rate >= 0.5 else "bad"
     parts.append(f"<span class='now {cls}'>{_axis_pct(last.rate)}</span>")
     if len(window) >= 2:
@@ -820,6 +847,19 @@ def _section_head(subject: str, window: Sequence[Point]) -> str:
             arrow = "up" if delta > 0 else "down"
             parts.append(f"<span class='chip {arrow}'>{delta:+.1f} pts</span>")
     return "<div class='shead'>" + "".join(parts) + "</div>"
+
+
+def _freshness(last: datetime, now: datetime) -> str:
+    """Day-granular on purpose: the page answers "is anyone measuring this",
+    not "at what hour". Dates are compared in each timestamp's own zone —
+    off-by-hours is fine at this resolution and keeps naive records safe to
+    subtract."""
+    days = (now.date() - last.date()).days
+    if days <= 0:
+        return "last run today"
+    if days == 1:
+        return "last run yesterday"
+    return f"last run {days} days ago"
 
 
 def _sparkline(

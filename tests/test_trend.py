@@ -7,6 +7,7 @@ about what it is showing.
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime, timedelta
 
 from agent_evals import trend
@@ -274,8 +275,6 @@ def test_overview_labels_are_never_stacked_closer_than_the_minimum_gap():
             r["run_id"] = f"{name}-{n}"
             records.append(r)
     page = trend.render(records)
-    import re
-
     ys = sorted(float(m) for m in re.findall(r"class='name'[^>]* y='([\d.]+)'", page))
     assert len(ys) == 6
     gaps = [b - a for a, b in zip(ys, ys[1:], strict=False)]
@@ -286,8 +285,6 @@ def test_the_overview_defaults_to_the_run_number_axis():
     """Runs are deliberate and sparse (RC1-314): on a time axis ten quiet days
     render as a stretch of nothing that reads as a broken chart. The time
     layout survives as the toggle, pre-rendered in `data-` attributes."""
-    import re
-
     page = trend.render([_record(n) for n in (0, 1, 10)])  # irregular gaps
     ov = page[page.index("class='ov'") : page.index("</svg>")]
     m = re.search(r"points='([^']*)' data-tpts='([^']*)' data-rpts='([^']*)'", ov)

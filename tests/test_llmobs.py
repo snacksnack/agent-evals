@@ -5,6 +5,7 @@ The enabled path is tested against a fake LLMObs — these tests must not
 depend on the `llmobs` extra being installed, let alone on an intake."""
 
 
+import os
 from decimal import Decimal
 
 import pytest
@@ -81,6 +82,43 @@ def test_enable_declines_without_ddtrace(monkeypatch):
 def test_case_is_noop_when_disabled():
     with llmobs.case("c1") as handle:
         handle.record(_result())  # must not raise
+
+
+def test_enable_declines_instead_of_raising_when_patching_crashes(monkeypatch, capsys):
+    """RC1-331: launch-planner's own `agents` package crashed LLMObs.enable().
+
+    Tracing is decoration — a billed run must never die for it.
+    """
+    monkeypatch.setenv("DD_API_KEY", "k")
+    # Keep the env-defaulting out of this test: no lingering DD_TRACE_* vars.
+    monkeypatch.setattr(llmobs, "_llm_integration_modules", tuple)
+
+    class CrashingLLMObs(FakeLLMObs):
+        def enable(self, **kwargs):
+            raise ModuleNotFoundError("No module named 'agents.tracing'")
+
+    monkeypatch.setattr(llmobs, "LLMObs", CrashingLLMObs())
+    assert llmobs.enable("test-app") is False
+    assert llmobs.active() is False
+    assert "agents.tracing" in capsys.readouterr().err
+
+
+def test_non_anthropic_integrations_are_defaulted_off(monkeypatch):
+    """RC1-331: the estate is Anthropic-only; nothing else gets patched."""
+    monkeypatch.setenv("DD_API_KEY", "k")
+    monkeypatch.setattr(
+        llmobs, "_llm_integration_modules", lambda: ("anthropic", "openai_agents", "google-genai")
+    )
+    monkeypatch.delenv("DD_TRACE_ANTHROPIC_ENABLED", raising=False)
+    monkeypatch.delenv("DD_TRACE_OPENAI_AGENTS_ENABLED", raising=False)
+    # An explicit environment setting must survive the defaulting.
+    monkeypatch.setenv("DD_TRACE_GOOGLE_GENAI_ENABLED", "true")
+    monkeypatch.setattr(llmobs, "LLMObs", FakeLLMObs())
+
+    assert llmobs.enable("test-app") is True
+    assert "DD_TRACE_ANTHROPIC_ENABLED" not in os.environ
+    assert os.environ["DD_TRACE_OPENAI_AGENTS_ENABLED"] == "false"
+    assert os.environ["DD_TRACE_GOOGLE_GENAI_ENABLED"] == "true"
 
 
 def test_enable_patches_parse_and_is_idempotent(monkeypatch):

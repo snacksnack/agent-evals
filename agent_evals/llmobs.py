@@ -19,12 +19,22 @@ so auto-instrumentation alone would silently trace half the estate and drop
 the other half. `enable()` therefore patches `parse` with a manual `llm`
 span carrying the same model, token and message fields the auto-instrumented
 spans get.
+
+**Anthropic-only patching (RC1-331).** `LLMObs.enable()` patches ddtrace's
+entire LLM integration list with `raise_errors=True`, so a module-name
+collision or version mismatch crashes the billed run tracing was meant to
+decorate — launch-planner hit both (its own `agents` layer vs the
+openai_agents integration; `mcp>=2` vs the mcp integration's 1.x layout).
+The estate is Anthropic-only, so `enable()` env-defaults every other LLM
+integration off, and treats any failure to start tracing as a decline
+rather than an error: a billed run must never die for its decoration.
 """
 
 from __future__ import annotations
 
 import functools
 import os
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 
@@ -57,15 +67,52 @@ def enable(ml_app: str, *, service: str | None = None) -> bool:
         return True
     if LLMObs is None or not os.environ.get("DD_API_KEY"):
         return False
-    LLMObs.enable(
-        ml_app=ml_app,
-        agentless_enabled=True,
-        site=os.environ.get("DD_SITE", "datadoghq.com"),
-        service=service or ml_app,
-    )
-    _patch_parse()
+    _restrict_patching_to_anthropic()
+    try:
+        LLMObs.enable(
+            ml_app=ml_app,
+            agentless_enabled=True,
+            site=os.environ.get("DD_SITE", "datadoghq.com"),
+            service=service or ml_app,
+        )
+        _patch_parse()
+    except Exception as exc:
+        print(f"llmobs: tracing disabled, enable() failed: {exc}", file=sys.stderr)
+        return False
     _enabled = True
     return True
+
+
+def _llm_integration_modules() -> tuple[str, ...]:
+    """The module names `LLMObs.enable()` would patch; empty when unknown.
+
+    Read from ddtrace's own constants — the same two lists its
+    `_patch_integrations` concatenates — so the set tracks the installed
+    version instead of a hardcoded copy going stale. Private imports,
+    guarded: if they move in a future ddtrace, we fall back to patching
+    everything, and the try/except in `enable()` still keeps the run alive.
+    """
+    try:
+        from ddtrace.llmobs._constants import SUPPORTED_LLMOBS_INTEGRATIONS
+        from ddtrace.llmobs._llmobs import _INTEGRATIONS_W_PROPAGATION_SUPPORT
+    except ImportError:  # pragma: no cover - exercised only on a moved layout
+        return ()
+    modules = set(SUPPORTED_LLMOBS_INTEGRATIONS.values())
+    modules |= set(_INTEGRATIONS_W_PROPAGATION_SUPPORT.values())
+    return tuple(modules)
+
+
+def _restrict_patching_to_anthropic() -> None:
+    """Env-default every non-anthropic LLM integration off (RC1-331).
+
+    setdefault, not setenv: an explicitly configured `DD_TRACE_<X>_ENABLED`
+    in the environment still wins. The env-var id mirrors ddtrace's
+    `_integration_env_var_id` (upper-case, hyphens to underscores).
+    """
+    for module in _llm_integration_modules():
+        if module == "anthropic":
+            continue
+        os.environ.setdefault(f"DD_TRACE_{module.upper().replace('-', '_')}_ENABLED", "false")
 
 
 def _patch_parse() -> None:

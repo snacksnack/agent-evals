@@ -90,6 +90,8 @@ def test_enable_declines_instead_of_raising_when_patching_crashes(monkeypatch, c
     Tracing is decoration — a billed run must never die for it.
     """
     monkeypatch.setenv("DD_API_KEY", "k")
+    # Keep the env-defaulting out of this test: no lingering DD_TRACE_* vars.
+    monkeypatch.setattr(llmobs, "_llm_integration_modules", tuple)
 
     class CrashingLLMObs(FakeLLMObs):
         def enable(self, **kwargs):

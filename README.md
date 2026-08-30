@@ -134,7 +134,11 @@ becomes a traced LLM span (including `messages.parse`, which ddtrace alone
 misses — see `agent_evals/llmobs.py`), and wrapping a case in
 `llmobs.case(case_id)` + `handle.record(result)` attaches the harness verdict
 and cost to the trace as Datadog evaluations. Without either half it is a
-no-op — CI and uninstrumented laptops run identical code.
+no-op — CI and uninstrumented laptops run identical code. Since v0.4.1
+(RC1-331), `enable()` also restricts ddtrace's auto-patching to the anthropic
+integration (an explicitly set `DD_TRACE_<X>_ENABLED` still wins) and treats
+any failure to start tracing as a decline rather than an error — tracing is
+decoration, and a billed run must never die for it.
 
 ## Who uses it
 

@@ -127,6 +127,15 @@ local JSONL store still works. Every consumer pins a tag, so a harness change is
 deliberately two PRs — one here, one bump per consumer — and a pin bump that
 moves a score is itself a finding (RC1-261 established the parity check).
 
+The `llmobs` extra brings `ddtrace` for Datadog LLM Observability (RC1-322).
+A runner calls `agent_evals.llmobs.enable("<ml-app>")` unconditionally at
+startup: with the extra installed and `DD_API_KEY` set, every Anthropic call
+becomes a traced LLM span (including `messages.parse`, which ddtrace alone
+misses — see `agent_evals/llmobs.py`), and wrapping a case in
+`llmobs.case(case_id)` + `handle.record(result)` attaches the harness verdict
+and cost to the trace as Datadog evaluations. Without either half it is a
+no-op — CI and uninstrumented laptops run identical code.
+
 ## Who uses it
 
 Five repos consume the library, fifteen subjects between them. Each repo owns

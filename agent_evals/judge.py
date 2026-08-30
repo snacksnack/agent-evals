@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import json
 
-import anthropic
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent_evals.rubric import JUDGED_KEYS, RUBRIC_VERSION, Score, rubric_text
@@ -94,6 +93,13 @@ def client_for(api_key: str | None) -> object:
             "no API key supplied. The judge drives a real model; the caller resolves "
             "credentials and passes them in."
         )
+    # Deferred on purpose, not an RC1-316 leftover: launch-planner's
+    # planner-core boundary asserts `anthropic` never enters sys.modules in
+    # its credential-free suite, and its CLI imports this module
+    # unconditionally. Only the call that actually needs a client pays the
+    # SDK import. RC1-322 restored this after RC1-316 hoisted it.
+    import anthropic
+
     return anthropic.Anthropic(api_key=api_key)
 
 

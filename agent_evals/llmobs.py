@@ -28,8 +28,6 @@ import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from anthropic.resources.messages import Messages
-
 from agent_evals.record import CaseResult
 
 try:  # documented optional-dep exception: the `llmobs` extra may be absent
@@ -72,6 +70,12 @@ def enable(ml_app: str, *, service: str | None = None) -> bool:
 
 def _patch_parse() -> None:
     """Wrap `Messages.parse` in an `llm` span (see the parse gap above)."""
+    # Deferred, not top-level: importing this module must not load the LLM
+    # SDK. launch-planner's planner-core boundary asserts `anthropic` never
+    # enters sys.modules in its credential-free suite, and its evals CLI
+    # imports llmobs unconditionally — only enable() may pay this import.
+    from anthropic.resources.messages import Messages
+
     global _orig_parse
     if _orig_parse is not None:
         return

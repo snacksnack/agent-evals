@@ -21,6 +21,9 @@ dev = ["pytest>=8", "ruff>=0.6"]
 # consumer using the JSONL store should not compile libpq to score a narrative.
 # psycopg2-binary matches resumes/reid_basic — one Postgres driver in the estate.
 sql = ["psycopg2-binary>=2.9"]
+# Same reasoning: only a consumer shipping traces to Datadog needs an APM
+# tracer. `agent_evals.llmobs.enable()` is a no-op without this extra.
+llmobs = ["ddtrace>=4.14"]
 
 [build-system]
 requires = ["hatchling"]

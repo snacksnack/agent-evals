@@ -158,3 +158,42 @@ def test_case_records_error_verdict(monkeypatch):
         handle.record(_result(error="boom"))
     verdicts = [e for e in fake.evaluations if e["label"] == "harness_verdict"]
     assert verdicts[0]["value"] == "error"
+
+
+def test_case_annotates_outcome_as_span_output(monkeypatch):
+    """RC1-339: the trace list is a skimming surface — a case span must say
+    how it landed without a click-through. CaseResult holds no answer text,
+    so the output is the verdict plus what failed and why."""
+    monkeypatch.setenv("DD_API_KEY", "k")
+    fake = FakeLLMObs()
+    monkeypatch.setattr(llmobs, "LLMObs", fake)
+    llmobs.enable("test-app")
+    with llmobs.case("c1") as handle:
+        handle.record(_result(error="boom"))
+    [outcome] = [a["output_data"] for a in fake.annotations if "output_data" in a]
+    assert outcome["verdict"] == "error"
+    assert outcome["error"] == "boom"
+    assert "failed" not in outcome  # nothing scored, nothing to list
+
+
+def test_case_annotates_input_when_given_and_clips_it(monkeypatch):
+    monkeypatch.setenv("DD_API_KEY", "k")
+    fake = FakeLLMObs()
+    monkeypatch.setattr(llmobs, "LLMObs", fake)
+    llmobs.enable("test-app")
+    with llmobs.case("c1", input_data={"prd": "x" * 5000}) as handle:
+        handle.record(_result())
+    [given] = [a["input_data"] for a in fake.annotations if "input_data" in a]
+    assert len(given) == llmobs._CONTENT_CAP
+    assert given.endswith("…")
+
+
+def test_case_without_input_annotates_none(monkeypatch):
+    """The optional parameter stays optional: no downstream churn required."""
+    monkeypatch.setenv("DD_API_KEY", "k")
+    fake = FakeLLMObs()
+    monkeypatch.setattr(llmobs, "LLMObs", fake)
+    llmobs.enable("test-app")
+    with llmobs.case("c1") as handle:
+        handle.record(_result())
+    assert not [a for a in fake.annotations if "input_data" in a]

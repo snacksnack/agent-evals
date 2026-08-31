@@ -158,6 +158,17 @@ def _patch_parse() -> None:
     Messages.parse = parse
 
 
+#: Cap per annotated field (RC1-339). Case-span content exists for the trace
+#: *list* — a skimming surface — not as a payload store; the full prompts and
+#: completions live on the nested llm spans.
+_CONTENT_CAP = 1000
+
+
+def _clip(value: object) -> str:
+    text = str(value)
+    return text if len(text) <= _CONTENT_CAP else text[: _CONTENT_CAP - 1] + "…"
+
+
 class _NullCase:
     """The disabled handle: every runner can call `record()` unconditionally."""
 
@@ -174,10 +185,20 @@ class _Case:
 
         The verdict and cost go on as *evaluations*, not just tags — that is
         the column Datadog renders next to its own built-in evals, which is
-        exactly where a harness verdict belongs.
+        exactly where a harness verdict belongs. The outcome also goes on as
+        the span's output (RC1-339): a `CaseResult` holds no answer text, so
+        the honest list-view content is the verdict, what failed, and why.
         """
         verdict = "error" if result.error else ("pass" if result.passed else "fail")
-        LLMObs.annotate(self._span, tags={"verdict": verdict})
+        failed = [c.name for c in result.characteristics if not c.passed]
+        outcome: dict[str, str] = {"verdict": verdict}
+        if failed:
+            outcome["failed"] = _clip(", ".join(failed))
+        if result.error:
+            outcome["error"] = _clip(result.error)
+        if result.observations:
+            outcome["observations"] = _clip(result.observations)
+        LLMObs.annotate(self._span, tags={"verdict": verdict}, output_data=outcome)
         exported = LLMObs.export_span(self._span)
         if exported is None:
             return
@@ -193,15 +214,19 @@ class _Case:
 
 
 @contextmanager
-def case(case_id: str) -> Iterator[_Case | _NullCase]:
+def case(case_id: str, *, input_data: object | None = None) -> Iterator[_Case | _NullCase]:
     """One eval case as a workflow span; a no-op handle when tracing is off.
 
     The span wraps subject *and* scoring so the trace shows what a case
     actually costs end to end; `record()` the result before leaving the
-    block.
+    block. Pass the case's fixture (or a summary of it) as `input_data` so
+    the trace list shows what the case ran against (RC1-339) — clipped, the
+    list is for skimming.
     """
     if not _enabled:
         yield _NullCase()
         return
     with LLMObs.workflow(name=case_id) as span:
+        if input_data is not None:
+            LLMObs.annotate(span, input_data=_clip(input_data))
         yield _Case(span)

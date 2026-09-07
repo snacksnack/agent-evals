@@ -83,14 +83,31 @@ def refuse_credential_shaped(payload: str, *, run_id: str, destination: str) -> 
 
 class Usage(BaseModel):
     """What one case consumed. Zero for a deterministic subject, and recorded
-    anyway — "this costs nothing" is a finding worth being able to prove."""
+    anyway — "this costs nothing" is a finding worth being able to prove.
+
+    The four token counts mean what the API's `usage` fields mean, nothing
+    else (RC1-392): `input_tokens` is the *uncached* input only, and a cached
+    call's remaining context arrives as `cache_creation_input_tokens` (written
+    to the prompt cache, billed at 1.25x) and `cache_read_input_tokens` (served
+    from it, 0.1x). Recording the API's numbers verbatim is what lets a record
+    be re-priced later; a subject that folds the three into one field has
+    already thrown away the rate each was billed at. `context_tokens` is the
+    whole prompt the model read, for comparing against pre-caching records.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     input_tokens: int = 0
     output_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+    cache_read_input_tokens: int = 0
     cost_usd: Decimal = Decimal("0")
     latency_ms: float = Field(description="Wall-clock for the subject call, not the scoring.")
+
+    @property
+    def context_tokens(self) -> int:
+        """Everything the model read, cached or not."""
+        return self.input_tokens + self.cache_creation_input_tokens + self.cache_read_input_tokens
 
 
 class SubjectVersion(BaseModel):

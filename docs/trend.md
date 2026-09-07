@@ -190,6 +190,42 @@ page says how many were dropped. A view showing the last N looks identical to
 one showing everything, and the difference matters exactly when someone is
 chasing a regression.
 
+## Cost is four counts, not two (RC1-392)
+
+`pricing.cost_usd` knew an input rate and an output rate. When pr_agent turned
+on prompt caching (RC1-350, merged 2026-08-31) the API began reporting most of
+a review's context as `cache_read_input_tokens` and `cache_creation_input_tokens`
+— `input_tokens` is only the uncached remainder — and the subject kept summing
+`input_tokens`. Cases recorded 5 to 8 input tokens where the previous runs had
+recorded 9,000 to 20,000, and a corpus that had cost $0.76 to $0.80 recorded
+$0.30 with no real change. The page showed a cost improvement that was an
+accounting hole. RC1-387 found it on 2026-09-06 and priced the cache tokens in
+pr_agent's subject as a stopgap; v0.6.0 moves the two rates into the library
+(writes 1.25x the input price, reads 0.1x, verified against the published
+prompt-caching page 2026-09-07) and adds the two counts to `Usage`.
+
+**The convention:** a record's token counts mean exactly what the API's
+`usage` fields mean. `input_tokens` is the uncached input, the cache counts
+carry the rest, and `Usage.context_tokens` sums the three for anyone comparing
+against pre-caching records. Recording the API's numbers verbatim is what
+makes a record re-priceable when a rate changes; folding them into one field
+throws away which rate each was billed at.
+
+**The affected runs, and why they stay as they are.** Three `pr-review` runs
+carry the undercount: `pr-review-20260906T134001`, `pr-review-20260906T134425`
+and `pr-review-20260906T134436`, all started 2026-09-06 between 13:26 and
+13:44 UTC (the 08-31 run predates caching in the loop and recorded 180,499
+input tokens at full price; every run from 13:56 UTC onward carries the
+stopgap's cache-aware cost and its four counts in the case observations).
+They are not backfilled: the cache counts were never written, so there is
+nothing to re-price from, and an estimate from a neighbouring run would be an
+invented number in a store whose whole claim is that every cost is exact.
+The `pr-review` description on the page says which rows are low and by
+roughly how much. No other subject was affected — pr_agent is the only
+consumer with `cache_control` on a request (checked 2026-09-07 across
+launch-planner, tpm-automation-platform, both n8n repos and the incident
+summarizer).
+
 ## What it found on its first run
 
 Two findings, from 54 records across 13 subjects. The records that produced

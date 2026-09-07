@@ -9,6 +9,12 @@ part of the table for that reason — it says when a reader last checked.
 An unknown model raises rather than defaulting to zero. A silent $0.00 would let
 a subject look free forever after a model rename, which is exactly the finding
 RC1-254's budgets exist to surface.
+
+Prompt-cache tokens are priced too (RC1-392). The API reports a cached call's
+context in three fields — `input_tokens` is only the *uncached* remainder — and
+bills the other two at their own rates. A subject that priced `input_tokens`
+alone after turning caching on recorded its reviews at roughly 40% of their
+real cost, and the trend page showed a cost drop that never happened.
 """
 
 from __future__ import annotations
@@ -17,6 +23,16 @@ from decimal import Decimal
 
 #: When these prices were last verified against the published price list.
 AS_OF = "2026-08-16"
+
+#: Prompt-cache rates as multiples of the model's input price, verified against
+#: the published prompt-caching page on 2026-09-07. The same multipliers apply
+#: to every model in the table below. A 5-minute cache write bills 1.25x, a
+#: read 0.1x. The 1-hour TTL bills writes at 2x and is deliberately not
+#: modelled: no consumer uses it, and the API reports the two write kinds
+#: together in `cache_creation_input_tokens`, so a caller on the 1-hour TTL
+#: would have to split the count itself before this table could price it.
+CACHE_WRITE = Decimal("1.25")
+CACHE_READ = Decimal("0.1")
 
 _MILLION = Decimal("1000000")
 
@@ -62,8 +78,22 @@ PRICES: dict[str, ModelPrice] = {
 }
 
 
-def cost_usd(model: str, input_tokens: int, output_tokens: int) -> Decimal:
-    """Cost of one call, exact to the token."""
+def cost_usd(
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    *,
+    cache_creation_input_tokens: int = 0,
+    cache_read_input_tokens: int = 0,
+) -> Decimal:
+    """Cost of one call, exact to the token.
+
+    Pass the API's four usage counts as the API reports them: `input_tokens`
+    is the uncached remainder, and the two cache counts carry the rest of the
+    context. Leaving the cache counts at zero is correct only for a call that
+    made no use of prompt caching — for a cached call it is the undercount
+    RC1-392 fixed, and the record will look nearly free.
+    """
     try:
         price = PRICES[model]
     except KeyError as exc:
@@ -75,4 +105,6 @@ def cost_usd(model: str, input_tokens: int, output_tokens: int) -> Decimal:
     return (
         Decimal(input_tokens) * price.input_per_mtok
         + Decimal(output_tokens) * price.output_per_mtok
+        + Decimal(cache_creation_input_tokens) * price.input_per_mtok * CACHE_WRITE
+        + Decimal(cache_read_input_tokens) * price.input_per_mtok * CACHE_READ
     ) / _MILLION

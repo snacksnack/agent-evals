@@ -182,3 +182,42 @@ def test_subject_version_states_the_absence_of_a_model(tmp_path):
     assert raw["subject_version"]["model"] is None
     assert raw["subject_version"]["prompt_version"] is None
     assert raw["subject_version"]["code_version"]
+
+
+# --- prompt-cache counts on the record (RC1-392) ----------------------------
+
+
+def test_cache_counts_are_recorded_verbatim_and_sum_to_the_context(tmp_path):
+    """`input_tokens` is the API's uncached remainder, the cache counts carry
+    the rest, and the record keeps all three so it can be re-priced later."""
+    usage = Usage(
+        input_tokens=8,
+        output_tokens=1000,
+        cache_creation_input_tokens=4000,
+        cache_read_input_tokens=6000,
+        cost_usd=Decimal("0.031824"),
+        latency_ms=1.0,
+    )
+    assert usage.context_tokens == 10008
+    record = _record()
+    record.results[0] = record.results[0].model_copy(update={"usage": usage})
+    store = RunStore(tmp_path / "runs.jsonl")
+    store.append(record)
+    raw = load_jsonl(store.path)[0]["results"][0]["usage"]
+    assert raw["cache_creation_input_tokens"] == 4000
+    assert raw["cache_read_input_tokens"] == 6000
+    assert raw["input_tokens"] == 8
+    assert store.all()[0].results[0].usage.context_tokens == 10008
+
+
+def test_a_record_written_before_the_cache_counts_still_loads():
+    """Pre-0.6.0 records carry two counts. They read back as zero-cache calls,
+    which is what they were — or, for the three pr-review runs docs/trend.md
+    names, an undercount the record cannot repair because the counts were
+    never captured."""
+    usage = Usage.model_validate(
+        {"input_tokens": 5, "output_tokens": 1, "cost_usd": "0.0001", "latency_ms": 1.0}
+    )
+    assert usage.cache_creation_input_tokens == 0
+    assert usage.cache_read_input_tokens == 0
+    assert usage.context_tokens == 5

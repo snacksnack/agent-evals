@@ -61,7 +61,9 @@ SUBJECT_DESCRIPTIONS = {
     ),
     "pr-review": (
         "The PR review agent against planted defects — found, categorised, "
-        "severity, noise; never averaged"
+        "severity, noise; never averaged. The three 2026-09-06 runs before "
+        "13:56 UTC are priced ~2.5x low: cache tokens were not counted "
+        "(RC1-392) and were not recorded, so they cannot be re-priced"
     ),
     "raid": (
         "RAID log recall of a planted risk — with a low-risk PRD as the "

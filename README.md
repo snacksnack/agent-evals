@@ -118,7 +118,7 @@ Consumed by git ref. It is a library — nothing here is deployed.
 
 ```toml
 dependencies = [
-    "agent-evals[sql] @ git+https://github.com/snacksnack/agent-evals@v0.6.0",
+    "agent-evals[sql] @ git+https://github.com/snacksnack/agent-evals@v0.6.1",
 ]
 ```
 

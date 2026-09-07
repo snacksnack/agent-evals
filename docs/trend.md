@@ -226,6 +226,18 @@ consumer with `cache_control` on a request (checked 2026-09-07 across
 launch-planner, tpm-automation-platform, both n8n repos and the incident
 summarizer).
 
+**A second price error, found by checking the first (RC1-401).** Closing
+RC1-392 against the published page showed Sonnet 5 listed at $2 / $10 where
+the snapshot said $3 / $15 with a note calling the lower rate introductory.
+The Console's cost export settled it: every Sonnet 5 day since 08-14 was
+billed at $2 / $10, list price equal to billed, including days before the
+note's supposed cutoff. v0.6.1 corrects the snapshot. The 17 `claude-sonnet-5`
+runs recorded before it (five launch-planner subjects, $6.86 recorded against
+roughly $4.57 billed) stay as recorded, for the same reason the pr-review
+runs above do — and here the page can do better than a note: the `code`
+column changes at the pin bump, so the cost drop sits beside its cause,
+which is the attribution the view exists for. The five cards say so too.
+
 ## What it found on its first run
 
 Two findings, from 54 records across 13 subjects. The records that produced

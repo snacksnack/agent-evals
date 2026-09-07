@@ -22,7 +22,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 #: When these prices were last verified against the published price list.
-AS_OF = "2026-08-16"
+AS_OF = "2026-09-07"
 
 #: Prompt-cache rates as multiples of the model's input price, verified against
 #: the published prompt-caching page on 2026-09-07. The same multipliers apply
@@ -67,9 +67,12 @@ PRICES: dict[str, ModelPrice] = {
     # survey found pr_agent's claude-opus-4-6 to be dead config, so that one
     # is deliberately absent and cost_usd raising on it is the design working.
     "claude-opus-4-8": ModelPrice("5.00", "25.00"),
-    "claude-sonnet-5": ModelPrice(
-        "3.00", "15.00", note="introductory 2.00/10.00 through 2026-08-31; standard used here"
-    ),
+    # Priced at 3.00/15.00 until RC1-401 (2026-09-07) on the belief that
+    # 2.00/10.00 was an introductory rate ending 2026-08-31. It was not: the
+    # Console's cost export bills every Sonnet 5 day since 08-14 at 2.00/10.00,
+    # list price equal to billed, and the published page never said otherwise.
+    # Every claude-sonnet-5 run recorded before v0.6.1 carries a cost 1.5x high.
+    "claude-sonnet-5": ModelPrice("2.00", "10.00"),
     # The incident summarizer's Lambda pins this older Sonnet (RC1-267) — its
     # first runs recorded $0, which is the exact failure mode this module's
     # raise-on-unknown exists to prevent from staying silent.

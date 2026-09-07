@@ -86,3 +86,11 @@ def test_cache_counts_default_to_zero_so_an_uncached_caller_is_unchanged():
     assert pricing.cost_usd(
         "claude-sonnet-4-6", 1000, 2000, cache_creation_input_tokens=0, cache_read_input_tokens=0
     ) == Decimal("0.033")
+
+
+def test_sonnet_5_carries_the_billed_list_price():
+    """RC1-401: $2 / $10 per MTok — what the Console's cost export shows for
+    every Sonnet 5 day since 2026-08-14. The snapshot's $3 / $15 was 1.5x high."""
+    assert pricing.cost_usd("claude-sonnet-5", 1_000_000, 0) == Decimal("2.00")
+    assert pricing.cost_usd("claude-sonnet-5", 0, 1_000_000) == Decimal("10.00")
+    assert pricing.PRICES["claude-sonnet-5"].note == ""

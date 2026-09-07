@@ -41,3 +41,48 @@ def test_sonnet_4_6_carries_the_standard_sonnet_list_price():
     price = pricing.PRICES["claude-sonnet-4-6"]
     assert price.input_per_mtok == Decimal("3.00")
     assert price.output_per_mtok == Decimal("15.00")
+
+
+# --- prompt-cache tokens (RC1-392) ------------------------------------------
+
+
+def test_cache_rates_match_the_published_page_to_the_token():
+    """Sonnet 4.6: $3.75/MTok to write a 5-minute cache entry, $0.30/MTok to
+    read one. Haiku 4.5: $1.25 and $0.10. Verified against the prompt-caching
+    page 2026-09-07; one million tokens of each so the number *is* the page's."""
+    mtok = 1_000_000
+    assert pricing.cost_usd("claude-sonnet-4-6", 0, 0, cache_creation_input_tokens=mtok) == Decimal(
+        "3.75"
+    )
+    assert pricing.cost_usd("claude-sonnet-4-6", 0, 0, cache_read_input_tokens=mtok) == Decimal(
+        "0.30"
+    )
+    assert pricing.cost_usd("claude-haiku-4-5", 0, 0, cache_creation_input_tokens=mtok) == Decimal(
+        "1.25"
+    )
+    assert pricing.cost_usd("claude-haiku-4-5", 0, 0, cache_read_input_tokens=mtok) == Decimal(
+        "0.10"
+    )
+    assert Decimal("1.25") == pricing.CACHE_WRITE
+    assert Decimal("0.1") == pricing.CACHE_READ
+
+
+def test_a_cached_call_is_not_priced_as_nearly_free():
+    """The RC1-392 shape: 8 uncached input tokens, ~10K of context served
+    through the cache. Priced on `input_tokens` alone the call looks like
+    output-only; priced on all four counts the context is most of the bill."""
+    uncached_only = pricing.cost_usd("claude-sonnet-4-6", 8, 1000)
+    full = pricing.cost_usd(
+        "claude-sonnet-4-6", 8, 1000, cache_creation_input_tokens=4000, cache_read_input_tokens=6000
+    )
+    # 8 * 3 + 1000 * 15 + 4000 * 3 * 1.25 + 6000 * 3 * 0.1 = 24 + 15000 + 15000 + 1800 µ$
+    assert full == Decimal("0.031824")
+    assert uncached_only == Decimal("0.015024")
+    assert full - uncached_only == Decimal("0.0168"), "the cache tokens are half the bill"
+
+
+def test_cache_counts_default_to_zero_so_an_uncached_caller_is_unchanged():
+    assert pricing.cost_usd("claude-sonnet-4-6", 1000, 2000) == Decimal("0.033")
+    assert pricing.cost_usd(
+        "claude-sonnet-4-6", 1000, 2000, cache_creation_input_tokens=0, cache_read_input_tokens=0
+    ) == Decimal("0.033")

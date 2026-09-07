@@ -118,7 +118,7 @@ Consumed by git ref. It is a library — nothing here is deployed.
 
 ```toml
 dependencies = [
-    "agent-evals[sql] @ git+https://github.com/snacksnack/agent-evals@v0.3.0",
+    "agent-evals[sql] @ git+https://github.com/snacksnack/agent-evals@v0.6.0",
 ]
 ```
 
@@ -159,6 +159,14 @@ checks, runnable in CI with no credential — the property ADR-0031 protects) an
 a billed half. A full sweep of every billed suite costs a few dollars, and every
 record carries its own token usage and exact `Decimal` cost, so spend is a query
 over the store rather than a guess.
+
+A record's four token counts mean what the API's `usage` fields mean —
+`input_tokens` is the *uncached* remainder, and a cached call's context
+arrives as `cache_creation_input_tokens` and `cache_read_input_tokens`, billed
+at 1.25x and 0.1x the input price. `pricing.cost_usd` takes all four (since
+v0.6.0, RC1-392); a subject that prices `input_tokens` alone after turning
+caching on records its runs at roughly 40% of their cost, and the trend page
+shows a saving that never happened.
 
 The harness was extracted from `launch-planner-agent` (RC1-261), and the design
 history stays there: `docs/decisions.md` ADR-0030 through ADR-0037, and

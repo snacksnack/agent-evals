@@ -24,9 +24,19 @@ mkdir -p site && printf '%s' "$FAKE_PAGE" > site/index.html
 """
 
 
+# A CI runner has no git identity; commit-tree and the fixture's first commit need one.
+_ENV = {
+    **os.environ,
+    "GIT_AUTHOR_NAME": "t",
+    "GIT_AUTHOR_EMAIL": "t@example.com",
+    "GIT_COMMITTER_NAME": "t",
+    "GIT_COMMITTER_EMAIL": "t@example.com",
+}
+
+
 def _git(*args: str, cwd: Path) -> str:
     return subprocess.run(
-        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True
+        ["git", *args], cwd=cwd, env=_ENV, check=True, capture_output=True, text=True
     ).stdout.strip()
 
 
@@ -53,13 +63,9 @@ def repo(tmp_path: Path) -> Path:
 
 def _publish(work: Path, page: str) -> subprocess.CompletedProcess[str]:
     env = {
-        **os.environ,
+        **_ENV,
         "PATH": f"{work.parent / 'bin'}{os.pathsep}{os.environ['PATH']}",
         "FAKE_PAGE": page,
-        "GIT_AUTHOR_NAME": "t",
-        "GIT_AUTHOR_EMAIL": "t@example.com",
-        "GIT_COMMITTER_NAME": "t",
-        "GIT_COMMITTER_EMAIL": "t@example.com",
     }
     return subprocess.run(
         ["bash", str(work / "scripts" / "publish_trend.sh")],

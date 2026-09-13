@@ -168,6 +168,42 @@ sweep continues; suites needing an exported `ANTHROPIC_API_KEY` are skipped
 with a logged notice when the key is absent — no silent caps, in either
 direction.
 
+### The publish is verified against the remote, and the run reports itself (RC1-415)
+
+On 2026-09-08 the daily log said `PUBLISH FAILED`: the force push to
+`gh-pages` came back `cannot lock ref … is at 557b6d8 but expected 53d47fc`,
+eleven minutes after it started. It looked like a race with the two manual
+republishes of the day before. It was not — GitHub's activity log shows
+`gh-pages` moving to 557b6d8 at 13:01:18 UTC, the Pages build for that commit
+one second later, and 557b6d8 *is* the commit the job had just built. The
+update landed; the client, after a stalled response, heard a rejection whose
+"is at" value was our own commit. The page was current and the log said it
+was not. There was no real race to fix: the script pushes a raw commit against
+the advertisement it fetches on every push, so nothing local goes stale, and
+`tests/test_publish_trend.py` pins down that a manual republish and a
+scheduled run can land in either order.
+
+What was worth fixing is that a publish could fail — or merely claim to — and
+tell nobody but the log. Two changes:
+
+- **`publish_trend.sh` believes the remote, not the push.** A transfer under
+  1 KB/s for 60 s is failed rather than left to hang; a rejected push is retried
+  once; then `gh-pages` is read back and compared to the commit just built.
+  Equal is published, whatever git said on the way; anything else exits 1 with
+  both hashes in the message.
+- **`scheduled_eval.sh` reports every run to Datadog**, where the rest of the
+  estate is already visible: `agent_evals.scheduled_run.publish_ok` (1 or 0)
+  and `agent_evals.scheduled_run.suites_failed`, tagged `mode:daily|weekly`.
+  The monitor *Eval trend page publish — scheduled run heartbeat* (as code in
+  `tpm-automation-platform/datadog/`) goes red on a 0 and, with no point for
+  36 hours, on a morning the job never ran — which is how the 2026-09-07 exit
+  127 would have surfaced too. `DD_API_KEY` keeps its one home in `~/.zshrc`;
+  absent, the run logs that it went unreported and the no-data side of the
+  monitor catches it anyway.
+
+The page itself carries its freshness: the masthead's `generated` stamp is
+the render time in UTC, and each subject shows how long ago it last ran.
+
 ## What the page claims, and what it does not
 
 One question: **a score moved — what moved with it?** Every point carries its

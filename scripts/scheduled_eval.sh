@@ -14,6 +14,15 @@
 # publishes either way — a scheduled run that hides a bad score defeats the
 # point of scheduling it. Suites needing an exported ANTHROPIC_API_KEY are
 # skipped with a logged notice when the key is absent, never silently.
+#
+# Every run ends by reporting itself to Datadog (RC1-415): one gauge saying
+# whether the page published and one counting suites that failed to run,
+# tagged with the mode. A monitor in tpm-automation-platform/datadog/ watches
+# the first and goes red on a 0 or on a morning with no point at all — a
+# failed publish, or a job that never started, is then as visible as any other
+# failure on the estate instead of a line in a log nobody reads. DD_API_KEY
+# keeps its one home in ~/.zshrc; without it the run logs that it went
+# unreported, which the no-data side of the monitor will also notice.
 set -u
 setopt pipefail
 
@@ -74,10 +83,33 @@ else
   fi
 fi
 
+report() {  # report <publish_ok 0|1> <suites_failed>
+  if [[ -z "${DD_API_KEY:-}" ]]; then
+    log "-- not reported to Datadog: DD_API_KEY is not set"; return
+  fi
+  local now site body
+  now=$(date +%s); site="${DD_SITE:-datadoghq.com}"
+  body=$(printf '{"series":[%s,%s]}' \
+    "$(series agent_evals.scheduled_run.publish_ok "$1" "$now")" \
+    "$(series agent_evals.scheduled_run.suites_failed "$2" "$now")")
+  if curl -sS --fail -m 20 -o /dev/null -X POST "https://api.$site/api/v2/series" \
+       -H "DD-API-KEY: $DD_API_KEY" -H 'Content-Type: application/json' -d "$body"; then
+    log "-- reported to Datadog: publish_ok=$1 suites_failed=$2 mode=$MODE"
+  else
+    log "-- Datadog report FAILED (publish_ok=$1 suites_failed=$2 mode=$MODE)"
+  fi
+}
+series() {  # series <metric> <value> <unix-ts>  — one v2 gauge point
+  printf '{"metric":"%s","type":3,"points":[{"timestamp":%s,"value":%s}],"tags":["mode:%s"]}' \
+    "$1" "$3" "$2" "$MODE"
+}
+
 log "-- publishing trend page"
 if "$EVALS_REPO/scripts/publish_trend.sh"; then
+  report 1 "$failures"
   log "== $MODE run done ($failures suite(s) failed to run)"
 else
+  report 0 "$failures"
   log "== $MODE run done but PUBLISH FAILED ($failures suite(s) also failed to run)"
   exit 1
 fi

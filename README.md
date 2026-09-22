@@ -114,7 +114,7 @@ reached for one would work in exactly one repo.
 
 ## Install
 
-Consumed by git ref. It is a library — nothing here is deployed.
+Consumed by git ref. It is a library, so nothing is deployed: a pushed tag is the release.
 
 ```toml
 dependencies = [
@@ -126,6 +126,15 @@ The `sql` extra brings `psycopg2` for the shared Postgres store; without it the
 local JSONL store still works. Every consumer pins a tag, so a harness change is
 deliberately two PRs — one here, one bump per consumer — and a pin bump that
 moves a score is itself a finding (RC1-261 established the parity check).
+
+**Releasing.** Bump `version` in `pyproject.toml` and `__version__` in
+`agent_evals/__init__.py`, merge, then tag the merge commit `vX.Y.Z` and push the
+tag. `.github/workflows/release.yml` runs on the tag. It checks that the tag
+matches both version strings, installs `agent-evals[sql]` from the tag into an
+empty venv the way a consumer pins it, and imports it. Only then does it report
+the release to Datadog DORA as service `agent-evals` (RC1-459), which feeds
+release frequency and lead time with its PR-stage breakdown. The report needs
+the `DD_API_KEY` repo secret and fails the job when rejected.
 
 The `llmobs` extra brings `ddtrace` for Datadog LLM Observability (RC1-322).
 A runner calls `agent_evals.llmobs.enable("<ml-app>")` unconditionally at

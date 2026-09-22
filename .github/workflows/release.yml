@@ -1,0 +1,57 @@
+name: Release
+
+# A pushed v* tag is the release: every consumer pins one (RC1-261), so this is
+# the moment a change reaches them. The job proves the tag is usable the way a
+# consumer uses it, then reports it to Datadog DORA (RC1-459). Tests are ci.yml's
+# job, which also runs on the tag push.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record release start
+        run: echo "RELEASE_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # A tag that disagrees with the package version ships a release that
+      # reports the wrong version in every run record.
+      - name: Tag matches the package version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          project=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          module=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' agent_evals/__init__.py)
+          echo "tag=$tag pyproject=$project __version__=$module"
+          if [ "$tag" != "$project" ] || [ "$tag" != "$module" ]; then
+            echo "::error::tag v$tag does not match pyproject ($project) and __version__ ($module)"
+            exit 1
+          fi
+
+      # Install from the tag exactly as consumers pin it, in an empty venv, so a
+      # packaging mistake (a module left out of the wheel, a broken extra) fails
+      # here instead of in five consumers' next pin bump.
+      - name: Install the tag the way consumers do
+        run: |
+          set -euo pipefail
+          python -m venv /tmp/consumer
+          /tmp/consumer/bin/pip install --quiet \
+            "agent-evals[sql] @ git+${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}@${GITHUB_REF_NAME}"
+          cd /tmp
+          /tmp/consumer/bin/python -c "import agent_evals, agent_evals.sql_store; assert agent_evals.__version__ == '${GITHUB_REF_NAME#v}', agent_evals.__version__; print('imported', agent_evals.__version__)"
+
+      - name: Report release to Datadog DORA
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+        run: scripts/report_dora_deployment.sh agent-evals "$RELEASE_STARTED_AT" "$(git rev-parse HEAD)"

@@ -8,7 +8,7 @@ reasoning behind each rule is in the README and `docs/`.
 A **library** for evaluating LLM systems — frozen cases, characteristics scored
 rather than strings asserted, a judge that had to earn the right to fail a
 build, and append-only run records carrying model, prompt version, cost and
-latency so a regression can be *attributed*. Nothing here is deployed.
+latency so a regression can be *attributed*. Nothing is deployed; a pushed tag is the release (DORA, RC1-459).
 
 Five repos consume it, fifteen subjects between them, each pinning a git tag:
 `agent-evals[sql] @ git+…/agent-evals@v0.6.1`. That pin is the fact a reviewer

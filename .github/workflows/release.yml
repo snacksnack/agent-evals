@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  actions: read   # close_dora_failures.sh lists this workflow's own runs (RC1-464)
 
 jobs:
   release:
@@ -28,6 +29,7 @@ jobs:
       # A tag that disagrees with the package version ships a release that
       # reports the wrong version in every run record.
       - name: Tag matches the package version
+        id: tag_gate
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME#v}"
@@ -43,6 +45,7 @@ jobs:
       # packaging mistake (a module left out of the wheel, a broken extra) fails
       # here instead of in five consumers' next pin bump.
       - name: Install the tag the way consumers do
+        id: install_gate
         run: |
           set -euo pipefail
           python -m venv /tmp/consumer
@@ -51,7 +54,24 @@ jobs:
           cd /tmp
           /tmp/consumer/bin/python -c "import agent_evals, agent_evals.sql_store; assert agent_evals.__version__ == '${GITHUB_REF_NAME#v}', agent_evals.__version__; print('imported', agent_evals.__version__)"
 
+      # Either gate failing with the tag already pushed means a broken artifact
+      # standing as latest — that is this library's change failure (RC1-464).
+      # It measures broken-release exposure, not downtime: consumers pin by
+      # tag, so nothing is down while it stands. The commit sha is passed
+      # explicitly because GITHUB_SHA on an annotated tag is the tag object.
+      - name: Report release failure to Datadog DORA
+        if: failure() && (steps.tag_gate.outcome == 'failure' || steps.install_gate.outcome == 'failure')
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+        run: scripts/report_dora_failure.sh agent-evals "$(git rev-parse HEAD)"
+
       - name: Report release to Datadog DORA
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
         run: scripts/report_dora_deployment.sh agent-evals "$RELEASE_STARTED_AT" "$(git rev-parse HEAD)"
+
+      - name: Close restored DORA release failures
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: CURRENT_SHA="$(git rev-parse HEAD)" scripts/close_dora_failures.sh agent-evals release.yml "Tag matches the package version" "Install the tag the way consumers do"

@@ -34,5 +34,16 @@ jobs:
         run: uv sync --extra dev --extra sql
       - name: Lint
         run: uv run ruff check .
+      # RC1-452: --ddtrace reports test-level results to Test Optimization,
+      # agentless. `--with` overlays ddtrace at test time only (the llmobs
+      # extra stays optional). Not a test credential: the suite passes
+      # identically with no key, so CI stays credential-free in ADR-0031's
+      # sense.
       - name: Tests
-        run: uv run pytest
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_CIVISIBILITY_AGENTLESS_ENABLED: "true"
+          DD_SITE: datadoghq.com
+          DD_SERVICE: agent-evals
+          DD_ENV: ci
+        run: uv run --with "ddtrace>=4.14,<5" pytest --ddtrace

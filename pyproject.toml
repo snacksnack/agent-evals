@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "pytest-cov>=6.0", "ruff>=0.6"]
 # An extra rather than a dependency: only `SqlRunStore` needs a driver, and a
 # consumer using the JSONL store should not compile libpq to score a narrative.
 # psycopg2-binary matches resumes/reid_basic — one Postgres driver in the estate.
@@ -48,3 +48,8 @@ known-first-party = ["agent_evals"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+# RC1-468: coverage measures what ships — the library package consumers
+# install. scripts/ and site/ are tooling, not product.
+[tool.coverage.run]
+source = ["agent_evals"]

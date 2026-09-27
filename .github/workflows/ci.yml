@@ -39,6 +39,9 @@ jobs:
       # extra stays optional). Not a test credential: the suite passes
       # identically with no key, so CI stays credential-free in ADR-0031's
       # sense.
+      # RC1-468: --cov adds line coverage; ddtrace reports it as
+      # test.code_coverage.lines_pct. Coverage is a signal, not a gate — no
+      # threshold fails this step.
       - name: Tests
         env:
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
@@ -46,4 +49,4 @@ jobs:
           DD_SITE: datadoghq.com
           DD_SERVICE: agent-evals
           DD_ENV: ci
-        run: uv run --with "ddtrace>=4.14,<5" pytest --ddtrace
+        run: uv run --with "ddtrace>=4.14,<5" pytest --ddtrace --cov

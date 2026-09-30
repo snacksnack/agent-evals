@@ -73,6 +73,11 @@ else
     suite "$s" tpm-automation-platform .venv/bin/python -m evals run "$s"
   done
   suite pr-review pr-request-agent .venv/bin/python -m evals
+  # RC1-477: not an eval-store suite — posts bakeoff.retrieval.* gauges
+  # straight to Datadog for the bake-off dashboard. Exit 1 here means the
+  # POST failed or the local corpus is behind production, not scored cases;
+  # either way the dashboard's "no data" stays honest (per-run cadence).
+  suite retrieval-bakeoff resumes/reid_basic .venv/bin/python scripts/eval_retrieval.py --post-datadog
   if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
     suite stakeholder-status-email n8n-stakeholder-status-email .venv/bin/python -m evals
     suite concert-preview n8n-concert-intelligence .venv/bin/python -m evals

@@ -134,7 +134,10 @@ matches both version strings, installs `agent-evals[sql]` from the tag into an
 empty venv the way a consumer pins it, and imports it. Only then does it report
 the release to Datadog DORA as service `agent-evals` (RC1-459), which feeds
 release frequency and lead time with its PR-stage breakdown. The report needs
-the `DD_API_KEY` repo secret and fails the job when rejected.
+the `DD_API_KEY` repo secret and fails the job when rejected. Two more jobs
+follow and neither can fail the run (RC1-497): one posts the PRs merged since
+the previous tag to `#releases`, the other publishes the GitHub Release for
+the tag with GitHub's generated notes.
 
 The `llmobs` extra brings `ddtrace` for Datadog LLM Observability (RC1-322).
 A runner calls `agent_evals.llmobs.enable("<ml-app>")` unconditionally at

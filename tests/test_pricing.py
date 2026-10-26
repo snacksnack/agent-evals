@@ -94,3 +94,12 @@ def test_sonnet_5_carries_the_billed_list_price():
     assert pricing.cost_usd("claude-sonnet-5", 1_000_000, 0) == Decimal("2.00")
     assert pricing.cost_usd("claude-sonnet-5", 0, 1_000_000) == Decimal("10.00")
     assert pricing.PRICES["claude-sonnet-5"].note == ""
+
+
+def test_opus_5_5_carries_the_published_list_price():
+    """RC1-548: $4 / $20 per MTok, the published first-party rate. The note is
+    load-bearing: Opus 5.5's cache read is 0.05x, not the table's uniform 0.1x,
+    so a consumer sending it cached calls must grow a per-model rate first."""
+    assert pricing.cost_usd("claude-opus-5-5", 1_000_000, 0) == Decimal("4.00")
+    assert pricing.cost_usd("claude-opus-5-5", 0, 1_000_000) == Decimal("20.00")
+    assert "0.05x" in pricing.PRICES["claude-opus-5-5"].note

@@ -22,7 +22,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 #: When these prices were last verified against the published price list.
-AS_OF = "2026-09-07"
+AS_OF = "2026-10-26"
 
 #: Prompt-cache rates as multiples of the model's input price, verified against
 #: the published prompt-caching page on 2026-09-07. The same multipliers apply
@@ -78,6 +78,16 @@ PRICES: dict[str, ModelPrice] = {
     # raise-on-unknown exists to prevent from staying silent.
     "claude-sonnet-4-6": ModelPrice("3.00", "15.00"),
     "claude-haiku-4-5": ModelPrice("1.00", "5.00"),
+    # esp-migration-agent's narrator and mapping proposer call this (RC1-548).
+    # Opus 5.5 publishes a $0.20/MTok cache read — 0.05x of input, not the
+    # uniform 0.1x CACHE_READ above — so a *cached* run on this model would be
+    # overstated 2x on its cache reads. No consumer sends it cached calls
+    # today; grow a per-model rate before one does, not a silent exception.
+    "claude-opus-5-5": ModelPrice(
+        "4.00",
+        "20.00",
+        note="cache reads bill 0.05x, not the table's uniform 0.1x; see comment",
+    ),
 }
 
 

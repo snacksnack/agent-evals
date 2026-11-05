@@ -45,6 +45,14 @@ Run each from its repo root.
 | [`n8n-stakeholder-status-email`](https://github.com/snacksnack/n8n-stakeholder-status-email) | `python -m evals` | `pytest` (layer 1) | `ANTHROPIC_API_KEY`, exported — no `.env` is read |
 | [`n8n-concert-intelligence`](https://github.com/snacksnack/n8n-concert-intelligence-agent) | `python -m evals` | `pytest` (layer 1) | `ANTHROPIC_API_KEY`, exported — no `.env` is read |
 | [`ai-incident-summarizer`](https://github.com/snacksnack/ai-incident-summarizer) (local dir `ai_powered_incident_alert_summarizer`) | `python -m evals` | — | `ANTHROPIC_API_KEY`, exported — the Lambda uses Secrets Manager, the eval deliberately doesn't touch AWS (RC1-267) |
+| [`api-compatibility-lab`](https://github.com/snacksnack/api-compatibility-lab) | `uv run --group evals python -m evals --post-datadog` | all six dimensions — there is no billed half | no key: the subject makes no model call (RC1-611) |
+
+`api-compatibility-lab` is the first subject here with **no billed half at
+all**: it scores a deterministic pipeline against ground truth its author did
+not write, so its records carry `model: null` and zero spend — which the
+record schema has always allowed for, and which is worth being able to prove
+rather than leaving out. It posts its own Datadog gauges on the way past, like
+`retrieval-bakeoff` does.
 
 `launch-planner-agent`'s billed subjects are `tool-selection`,
 `status-narrative`, `work-breakdown`, `dependency`, `raid` and `spec-review`

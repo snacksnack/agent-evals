@@ -82,6 +82,15 @@ else
   # posts compatlab.* quality gauges for the lab's Datadog dashboard, whose
   # cadence is therefore this sweep's.
   suite compatlab api-compatibility-lab uv run --group evals python -m evals --post-datadog
+  # RC1-636: the ESP mapping proposer (RC1-548), ~$0.43 a run. Its key is the
+  # repo's own ESP_ANTHROPIC_API_KEY in .env, not the exported one. The suite
+  # exits 2 without it, which would read as "errored, recorded" with nothing
+  # recorded, so check first and skip loudly.
+  if grep -q '^ESP_ANTHROPIC_API_KEY=.' "$PERSONAL/esp-migration-agent/.env" 2>/dev/null; then
+    suite esp-mapping-quality esp-migration-agent uv run --group evals python -m evals
+  else
+    log "-- SKIPPED esp-mapping-quality: ESP_ANTHROPIC_API_KEY is not in esp-migration-agent/.env"
+  fi
   if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
     suite stakeholder-status-email n8n-stakeholder-status-email .venv/bin/python -m evals
     suite concert-preview n8n-concert-intelligence .venv/bin/python -m evals

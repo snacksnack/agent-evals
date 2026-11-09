@@ -46,6 +46,7 @@ Run each from its repo root.
 | [`n8n-concert-intelligence`](https://github.com/snacksnack/n8n-concert-intelligence-agent) | `python -m evals` | `pytest` (layer 1) | `ANTHROPIC_API_KEY`, exported — no `.env` is read |
 | [`ai-incident-summarizer`](https://github.com/snacksnack/ai-incident-summarizer) (local dir `ai_powered_incident_alert_summarizer`) | `python -m evals` | — | `ANTHROPIC_API_KEY`, exported — the Lambda uses Secrets Manager, the eval deliberately doesn't touch AWS (RC1-267) |
 | [`api-compatibility-lab`](https://github.com/snacksnack/api-compatibility-lab) | `uv run --group evals python -m evals --post-datadog` | all six dimensions — there is no billed half | no key: the subject makes no model call (RC1-611) |
+| [`poc-benchmark-agent`](https://github.com/snacksnack/poc-benchmark-agent) | `uv run --group evals python -m evals --post-datadog` | `held-out-isolation`, `report-honesty`, `prediction-calibration` (`--case <id>`) | `ANTHROPIC_API_KEY`, exported — the repo `.env` holds only Neon credentials (RC1-634) |
 
 `api-compatibility-lab` is the first subject here with **no billed half at
 all**: it scores a deterministic pipeline against ground truth its author did
@@ -58,7 +59,12 @@ rather than leaving out. It posts its own Datadog gauges on the way past, like
 `status-narrative`, `work-breakdown`, `dependency`, `raid` and `spec-review`
 (RC1-292 — planted-defect recall per rubric category over the spec-gate corpus,
 plus false-positive restraint on the good spec and the fabricated-quote rate);
-the other four repos have one billed subject each. A full sweep of every billed suite costs a few dollars,
+the other four repos have one billed subject each. `poc-benchmark-agent`
+(RC1-634) is the first subject whose billed half runs an agent *loop*: the
+real Claude proposer through the production validator, budgets and output
+rule on modeled workloads, about $0.55 a run. It records its own cost because
+the price snapshot here reads Opus 5.5 cache at 0.1x input and the list price
+is 0.05x. A full sweep of every billed suite costs a few dollars,
 and every record carries its own exact cost, so the running total is a query
 rather than a guess.
 

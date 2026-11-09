@@ -86,8 +86,11 @@ else
     suite stakeholder-status-email n8n-stakeholder-status-email .venv/bin/python -m evals
     suite concert-preview n8n-concert-intelligence .venv/bin/python -m evals
     suite incident-summary ai_powered_incident_alert_summarizer .venv/bin/python -m evals
+    # RC1-634: the real Claude proposer through the real loop on two modeled
+    # workloads (~$0.55); also posts pocbench.* gauges for its monitor.
+    suite poc-benchmark poc-benchmark-agent uv run --group evals python -m evals --post-datadog
   else
-    log "-- SKIPPED stakeholder-status-email, concert-preview, incident-summary:"
+    log "-- SKIPPED stakeholder-status-email, concert-preview, incident-summary, poc-benchmark:"
     log "   their suites read an exported ANTHROPIC_API_KEY and none is set (docs/measuring.md)"
   fi
 fi

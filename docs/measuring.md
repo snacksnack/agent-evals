@@ -46,6 +46,7 @@ Run each from its repo root.
 | [`n8n-concert-intelligence`](https://github.com/snacksnack/n8n-concert-intelligence-agent) | `python -m evals` | `pytest` (layer 1) | `ANTHROPIC_API_KEY`, exported — no `.env` is read |
 | [`ai-incident-summarizer`](https://github.com/snacksnack/ai-incident-summarizer) (local dir `ai_powered_incident_alert_summarizer`) | `python -m evals` | — | `ANTHROPIC_API_KEY`, exported — the Lambda uses Secrets Manager, the eval deliberately doesn't touch AWS (RC1-267) |
 | [`api-compatibility-lab`](https://github.com/snacksnack/api-compatibility-lab) | `uv run --group evals python -m evals --post-datadog` | all six dimensions — there is no billed half | no key: the subject makes no model call (RC1-611) |
+| [`esp-migration-agent`](https://github.com/snacksnack/esp-migration-agent) | `uv run --group evals python -m evals` | `pytest` (layer 1) | `ESP_ANTHROPIC_API_KEY`, from `.env` (RC1-548; the sweep skips loudly without it, RC1-636) |
 | [`poc-benchmark-agent`](https://github.com/snacksnack/poc-benchmark-agent) | `uv run --group evals python -m evals --post-datadog` | `held-out-isolation`, `report-honesty`, `prediction-calibration` (`--case <id>`) | `ANTHROPIC_API_KEY`, exported — the repo `.env` holds only Neon credentials (RC1-634) |
 
 `api-compatibility-lab` is the first subject here with **no billed half at

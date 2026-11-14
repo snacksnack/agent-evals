@@ -98,8 +98,12 @@ else
     # RC1-634: the real Claude proposer through the real loop on two modeled
     # workloads (~$0.55); also posts pocbench.* gauges for its monitor.
     suite poc-benchmark poc-benchmark-agent uv run --group evals python -m evals --post-datadog
+    # RC1-644: the customer install kit's triage agent over frozen bundles
+    # (~$0.95); also posts cik.evals.* gauges for its monitor.
+    suite cik-triage customer-install-kit uv run --group evals python -m evals --post-datadog
   else
-    log "-- SKIPPED stakeholder-status-email, concert-preview, incident-summary, poc-benchmark:"
+    log "-- SKIPPED stakeholder-status-email, concert-preview, incident-summary, poc-benchmark,"
+    log "   cik-triage:"
     log "   their suites read an exported ANTHROPIC_API_KEY and none is set (docs/measuring.md)"
   fi
 fi

@@ -48,6 +48,7 @@ Run each from its repo root.
 | [`api-compatibility-lab`](https://github.com/snacksnack/api-compatibility-lab) | `uv run --group evals python -m evals --post-datadog` | all six dimensions — there is no billed half | no key: the subject makes no model call (RC1-611) |
 | [`esp-migration-agent`](https://github.com/snacksnack/esp-migration-agent) | `uv run --group evals python -m evals` | `pytest` (layer 1) | `ESP_ANTHROPIC_API_KEY`, from `.env` (RC1-548; the sweep skips loudly without it, RC1-636) |
 | [`poc-benchmark-agent`](https://github.com/snacksnack/poc-benchmark-agent) | `uv run --group evals python -m evals --post-datadog` | `held-out-isolation`, `report-honesty`, `prediction-calibration` (`--case <id>`) | `ANTHROPIC_API_KEY`, exported — the repo `.env` holds only Neon credentials (RC1-634) |
+| [`customer-install-kit`](https://github.com/snacksnack/customer-install-kit) | `uv run --group evals python -m evals --post-datadog` | `--free`: `metadata-only-tracing`, `isolation` (CI runs these) | `ANTHROPIC_API_KEY`, exported (RC1-644) |
 
 `api-compatibility-lab` is the first subject here with **no billed half at
 all**: it scores a deterministic pipeline against ground truth its author did
@@ -65,7 +66,16 @@ the other four repos have one billed subject each. `poc-benchmark-agent`
 real Claude proposer through the production validator, budgets and output
 rule on modeled workloads, about $0.55 a run. It records its own cost because
 the price snapshot here reads Opus 5.5 cache at 0.1x input and the list price
-is 0.05x. A full sweep of every billed suite costs a few dollars,
+is 0.05x. `customer-install-kit`'s subject, `cik-triage` (RC1-644), runs the
+real triage agent over frozen diagnostic bundles, answering its follow-up
+requests with canned supplements, for about $0.95 a run. It has no LLM judge:
+a judge would send finding text derived from customer evidence to a model
+outside the kit's reviewed inference payload. Correctness is scored
+structurally instead, from the outcome, the requested check and whether
+citations land on the decisive rows. It also does not use `llmobs`: the
+kit's own metadata-only telemetry traces the run (`env:evals`), because the
+ddtrace Anthropic integration would record prompts that carry bundle content.
+A full sweep of every billed suite costs a few dollars,
 and every record carries its own exact cost, so the running total is a query
 rather than a guess.
 
